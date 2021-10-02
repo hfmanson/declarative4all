@@ -29,25 +29,54 @@ Fleur.Context.prototype.xqx_namespaceRemoval = function(prefix) {
 };
 
 Fleur.XQueryEngine[Fleur.XQueryX.namespaceDeclaration] = function(ctx, children, callback) {
-  var attr = new Fleur.Attr();
-  var t;
-  if (children[0][0] === Fleur.XQueryX.prefixElt) {
-    attr.localName = children[0][1][0];
-    attr.nodeName = "xmlns:" + attr.localName;
-    attr.namespaceURI = "http://www.w3.org/2000/xmlns/";
-    attr.prefix = "xmlns";
-    t = new Fleur.Text();
-    t.data = children[1][1][0];
-    attr.appendChild(t);
-  } else {
-    attr.localName = "xmlns";
-    attr.nodeName = "xmlns";
-    attr.namespaceURI = "http://www.w3.org/XML/1998/namespace";
-    if (children[0][1].length !== 0) {
-      t = new Fleur.Text();
-      t.data = children[0][1][0];
-      attr.appendChild(t);
-    }
-  }
-  Fleur.callback(function() {callback(attr);});
+	var attr;// = new Fleur.Attr();
+	var t;
+	if (children[0][0] === Fleur.XQueryX.prefixElt) {
+		attr = document.createAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:" + children[0][1][0]);
+/*
+		attr.localName = children[0][1][0];
+		attr.nodeName = "xmlns:" + attr.localName;
+		attr.namespaceURI = "http://www.w3.org/2000/xmlns/";
+		attr.prefix = "xmlns";
+
+		t = new Fleur.Text();
+		t.data = children[1][1][0];
+*/
+		attr.value = children[1][1][0];
+	} else {
+		attr = document.createAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns");
+/*
+		attr.localName = "xmlns";
+		attr.nodeName = "xmlns";
+		attr.namespaceURI = "http://www.w3.org/2000/xmlns/";
+*/
+		if (children[0][1].length !== 0) {
+/*
+			t = new Fleur.Text();
+			t.data = children[0][1][0];
+*/
+			attr.value = children[0][1][0];
+		}
+	}
+	Fleur.callback(function() {callback(attr);});
+};
+Fleur.XQueryEngine[Fleur.XQueryX.nameTest] = function(ctx, children, callback) {
+	if (ctx._curr.localName !== children[0]) {
+		Fleur.callback(function() {callback(Fleur.EmptySequence);});
+		return;
+	}
+	var nsURI;
+	if (children.length === 1) {
+		nsURI = ctx.env.nsresolver.lookupNamespaceURI("") || "";
+	} else if (children[1][0] === Fleur.XQueryX.prefix) {
+		nsURI = ctx.env.nsresolver.lookupNamespaceURI(children[1][1][0]) || "";
+	} else {
+		nsURI = children[1][1][0];
+	}
+	var currURI = ctx._curr.namespaceURI || "";
+	if (currURI !==  nsURI && currURI !== "http://www.w3.org/1999/xhtml") {
+		Fleur.callback(function() {callback(Fleur.EmptySequence);});
+		return;
+	}
+	Fleur.callback(function() {callback(ctx._curr);});
 };

@@ -31,14 +31,11 @@
     <hr>
     <pre id="xqueryarr"></pre>
     <script type="text/javascript">
-      /*globals Fleur */
-      var xmldoc;
-      var parser = new Fleur.DOMParser();
       function fclear() {
         document.getElementById("effectiveresult").innerHTML = "";
         //alert("clear");
       }
-      var xqeval = async function(xexpr) {
+      var xqeval = async function(xmldoc, xexpr) {
         try {
           var res = await xmldoc.evaluate(xexpr);
           var now = new Date();
@@ -50,7 +47,8 @@
       };
       function run() {
         try {
-          xmldoc = parser.parseFromString(document.getElementById("doc").value, "application/xml");
+          var parser = new Fleur.DOMParser();
+          var xmldoc = parser.parseFromString(document.getElementById("doc").value, "application/xml");
           var jsret = Fleur.XPathEvaluator._xq2js(document.getElementById("test").value);
           var arr;
           eval("arr = " + jsret + ";");
@@ -61,7 +59,7 @@
         } catch(e) {
           document.getElementById("xqueryx").innerHTML = "Exception!\n" + e.message + (jsret ? "\n\n" + jsret : "");
         }
-        xqeval(document.getElementById("test").value);
+        xqeval(xmldoc, document.getElementById("test").value);
       }
     </script>
   </body>

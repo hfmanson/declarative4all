@@ -34,8 +34,11 @@ Fleur._Atomize = function(a, n, force) {
 			if (n.schemaTypeInfo === Fleur.Type_error || n.nodeName !== "#text") {
 				return n;
 			}
+/*			
 			a = new Fleur.Text();
 			a.data = n.data;
+*/			
+			a = document.createTextNode(n.data);
 			a.schemaTypeInfo = n.schemaTypeInfo;
 			return a;
 		case Fleur.Node.DOCUMENT_NODE:

@@ -184,7 +184,10 @@ Fleur.Node.prototype.appendDescendantsRev = function(src) {
     }
   }
 };
+/*
 Fleur.Node.prototype.appendContent = function(n, sep) {
+*/
+Node.prototype.appendContent = function(n, sep) {
   var n2;
   switch(n.nodeType) {
     case Fleur.Node.TEXT_NODE:
@@ -221,6 +224,7 @@ Fleur.Node.prototype.appendContent = function(n, sep) {
       this.setAttributeNodeNS(n2);
       break;
     case Fleur.Node.ELEMENT_NODE:
+/*
       n2 = new Fleur.Element();
       n2.nodeName = n.nodeName;
       n2.localName = n.localName;
@@ -233,6 +237,8 @@ Fleur.Node.prototype.appendContent = function(n, sep) {
       n.childNodes.forEach(function(c) {
         n2.appendContent(c, "");
       });
+*/
+      n2 = n.cloneNode(true);
       this.appendChild(n2);
       break;
     case Fleur.Node.SEQUENCE_NODE:
@@ -821,6 +827,9 @@ Fleur.Node.prototype.head = function() {
   return this;
 }
 Fleur.Node.prototype.isNotEmpty = function() {
+  return this.nodeType !== Fleur.Node.SEQUENCE_NODE || this.childNodes.length !== 0;
+};
+Node.prototype.isNotEmpty = function() {
   return this.nodeType !== Fleur.Node.SEQUENCE_NODE || this.childNodes.length !== 0;
 };
 Fleur.Node.prototype.isEmpty = function() {

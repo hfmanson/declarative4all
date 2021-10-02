@@ -5551,27 +5551,14 @@ Fleur.Text.prototype.splitText = function(offset) {
 	}
 	return t;
 };
-Fleur.TypeInfo = function(typeNamespace, typeName, derivationMethod, derivationType) {
-	this.typeNamespace = typeNamespace;
-	this.typeName = typeName;
-	Fleur.Types[typeNamespace][typeName] = this;
-	switch (derivationMethod) {
-		case Fleur.TypeInfo.DERIVATION_RESTRICTION:
-			this.restriction = derivationType;
-			break;
-		case Fleur.TypeInfo.DERIVATION_EXTENSION:
-			this.extension = derivationType;
-			break;
-		case Fleur.TypeInfo.DERIVATION_UNION:
-			this.union = derivationType;
-			break;
-		case Fleur.TypeInfo.DERIVATION_LIST:
-			this.list = derivationType;
-			break;
-	}
+Fleur.TypeInfo = function(typeNamespace, typeName, derivations) {
+  this.typeNamespace = typeNamespace;
+  this.typeName = typeName;
+  Fleur.Types[typeNamespace][typeName] = this;
+  this.derivations = derivations;
 };
-Fleur.TypeInfo_XMLSchema = function(typeName, derivationMethod, derivationType) {
-	Fleur.TypeInfo.call(this, "http://www.w3.org/2001/XMLSchema", typeName, derivationMethod, derivationType);	
+Fleur.TypeInfo_XMLSchema = function(typeName, derivations) {
+  Fleur.TypeInfo.call(this, "http://www.w3.org/2001/XMLSchema", typeName, derivations);  
 };
 Fleur.TypeInfo_XMLSchema.prototype = Object.create(Fleur.TypeInfo.prototype);
 Fleur.TypeInfo.DERIVATION_RESTRICTION = 1;
@@ -5579,688 +5566,702 @@ Fleur.TypeInfo.DERIVATION_EXTENSION = 2;
 Fleur.TypeInfo.DERIVATION_UNION = 4;
 Fleur.TypeInfo.DERIVATION_LIST = 8;
 Fleur.TypeInfo.prototype.canonicalize = function(s) {return s;};
+Fleur.TypeInfo.prototype.isDerivedFrom_ = function(typeArg, derivationMethod) {
+  if (this === typeArg) {
+    return true;
+  }
+  if (this.derivations) {
+    for (let i = 0, l = this.derivations.length; i < l; i++) {
+      if (typeArg === this.derivations[i][1] && (derivationMethod === 0 || (derivationMethod & this.derivations[i][0]) !== 0)) {
+        return true;
+      }
+      if (this.derivations[i][1].isDerivedFrom_(typeArg, derivationMethod)) {
+        return true;
+      }
+    }
+  }
+  return false;
+};
 Fleur.TypeInfo.prototype.isDerivedFrom = function(typeNamespaceArg, typeNameArg, derivationMethod) {
-	var propname, t, typeArg = Fleur.Types[typeNamespaceArg][typeNameArg];
-	switch (derivationMethod) {
-		case Fleur.TypeInfo.DERIVATION_RESTRICTION:
-			propname = "restriction";
-			break;
-		case Fleur.TypeInfo.DERIVATION_EXTENSION:
-			propname = "extension";
-			break;
-		case Fleur.TypeInfo.DERIVATION_UNION:
-			propname = "union";
-			break;
-		case Fleur.TypeInfo.DERIVATION_LIST:
-			propname = "list";
-			break;
-	}
-	if (this === typeArg) {
-		return true;
-	}
-	t = this[propname];
-	while (t) {
-		if (t === typeArg) {
-			return true;
-		}
-		t = t[propname];
-	}
-	return false;
+  return this.isDerivedFrom_(Fleur.Types[typeNamespaceArg][typeNameArg], derivationMethod);
+};
+Fleur.TypeInfo.prototype.as = function(targetedType) {
+  if (this.isDerivedFrom_(targetedType, Fleur.DERIVATION_RESTRICTION)) {
+    return true;
+  }
+  if (targetedType.derivations) {
+    for (let i= 0, l = targetedType.derivations.length; i < l; i++) {
+      if (targetedType.derivations[i][0] === Fleur.TypeInfo.DERIVATION_UNION) {
+        if (this.as(targetedType.derivations[i][1])) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
 };
 Fleur.TypeInfo.prototype.getPrimitiveType = function(types, derivationMethod) {
-	var propname, t, prim;
-	switch (derivationMethod) {
-		case Fleur.TypeInfo.DERIVATION_RESTRICTION:
-			propname = "restriction";
-			break;
-		case Fleur.TypeInfo.DERIVATION_EXTENSION:
-			propname = "extension";
-			break;
-		case Fleur.TypeInfo.DERIVATION_UNION:
-			propname = "union";
-			break;
-		case Fleur.TypeInfo.DERIVATION_LIST:
-			propname = "list";
-			break;
-	}
-	if (types.indexOf(this) !== -1) {
-		return this;
-	}
-	prim = this;
-	t = this[propname];
-	while (t) {
-		if (types.indexOf(t) !== -1) {
-			return t;
-		}
-		prim = t;
-		t = t[propname];
-	}
-	return prim;
+  var propname, t, prim;
+  switch (derivationMethod) {
+    case Fleur.TypeInfo.DERIVATION_RESTRICTION:
+      propname = "restriction";
+      break;
+    case Fleur.TypeInfo.DERIVATION_EXTENSION:
+      propname = "extension";
+      break;
+    case Fleur.TypeInfo.DERIVATION_UNION:
+      propname = "union";
+      break;
+    case Fleur.TypeInfo.DERIVATION_LIST:
+      propname = "list";
+      break;
+  }
+  if (types.indexOf(this) !== -1) {
+    return this;
+  }
+  prim = this;
+  t = this[propname];
+  while (t) {
+    if (types.indexOf(t) !== -1) {
+      return t;
+    }
+    prim = t;
+    t = t[propname];
+  }
+  return prim;
 };
 Fleur.TypeInfo.prototype.compareType = function(typeArg, derivationMethod) {
-	var propname, t;
-	switch (derivationMethod) {
-		case Fleur.TypeInfo.DERIVATION_RESTRICTION:
-			propname = "restriction";
-			break;
-		case Fleur.TypeInfo.DERIVATION_EXTENSION:
-			propname = "extension";
-			break;
-		case Fleur.TypeInfo.DERIVATION_UNION:
-			propname = "union";
-			break;
-		case Fleur.TypeInfo.DERIVATION_LIST:
-			propname = "list";
-			break;
-	}
-	var arr = [this];
-	t = this[propname];
-	while (t) {
-		if (t === typeArg) {
-			return typeArg;
-		}
-		arr.push(t);
-		t = t[propname];
-	}
-	t = typeArg;
-	while (t) {
-		if (arr.indexOf(t) !== -1) {
-			return t;
-		}
-		t = t[propname];
-	}
-	return null;
+  var propname, t;
+  switch (derivationMethod) {
+    case Fleur.TypeInfo.DERIVATION_RESTRICTION:
+      propname = "restriction";
+      break;
+    case Fleur.TypeInfo.DERIVATION_EXTENSION:
+      propname = "extension";
+      break;
+    case Fleur.TypeInfo.DERIVATION_UNION:
+      propname = "union";
+      break;
+    case Fleur.TypeInfo.DERIVATION_LIST:
+      propname = "list";
+      break;
+  }
+  var arr = [this];
+  t = this[propname];
+  while (t) {
+    if (t === typeArg) {
+      return typeArg;
+    }
+    arr.push(t);
+    t = t[propname];
+  }
+  t = typeArg;
+  while (t) {
+    if (arr.indexOf(t) !== -1) {
+      return t;
+    }
+    t = t[propname];
+  }
+  return null;
 };
 Fleur.Types = {};
 Fleur.Types["http://www.w3.org/2001/XMLSchema"] = {};
 Fleur.Types_XMLSchema = Fleur.Types["http://www.w3.org/2001/XMLSchema"];
 Fleur.Type_error = new Fleur.TypeInfo_XMLSchema("error");
-Fleur.Type_untypedAtomic = new Fleur.TypeInfo_XMLSchema("untypedAtomic");
-Fleur.Type_anySimpleType = new Fleur.TypeInfo_XMLSchema("anySimpleType");
-Fleur.Type_anyAtomicType = new Fleur.TypeInfo_XMLSchema("anyAtomicType");
-Fleur.Type_string = new Fleur.TypeInfo_XMLSchema("string");
+Fleur.Type_anyType = new Fleur.TypeInfo_XMLSchema("anyType");
+Fleur.Type_anySimpleType = new Fleur.TypeInfo_XMLSchema("anySimpleType", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyType]]);
+Fleur.Type_untyped = new Fleur.TypeInfo_XMLSchema("untyped", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyType]]);
+Fleur.Type_anyAtomicType = new Fleur.TypeInfo_XMLSchema("anyAtomicType", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anySimpleType]]);
+Fleur.Type_untypedAtomic = new Fleur.TypeInfo_XMLSchema("untypedAtomic", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
+Fleur.Type_string = new Fleur.TypeInfo_XMLSchema("string", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_string.atomizerName = "xs_string_1";
-Fleur.Type_boolean = new Fleur.TypeInfo_XMLSchema("boolean");
+Fleur.Type_boolean = new Fleur.TypeInfo_XMLSchema("boolean", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_boolean.atomizerName = "xs_boolean_1";
 Fleur.Type_boolean.canonicalize = function(s) {
-	if (/^\s*(true|false|0|1)\s*$/.test(s)) {
-		s = s.trim();
-		if (s === "0") {
-			return "false";
-		}
-		if (s === "1") {
-			return "true";
-		}
-		return s;
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*(true|false|0|1)\s*$/.test(s)) {
+    s = s.trim();
+    if (s === "0") {
+      return "false";
+    }
+    if (s === "1") {
+      return "true";
+    }
+    return s;
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_decimal = new Fleur.TypeInfo_XMLSchema("decimal");
+Fleur.Type_decimal = new Fleur.TypeInfo_XMLSchema("decimal", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_decimal.atomizerName = "xs_decimal_1";
 Fleur.Type_decimal.canonicalize = function(s) {
-	if (/^\s*[\-+]?([0-9]+(\.[0-9]*)?|[\-+]?\.[0-9]+)\s*$/.test(s)) {
-		s = s.trim();
-		var ret = "";
-		var i = 0;
-		var c = s.charAt(i);
-		var dec = "";
-		if (c === "-") {
-			ret = "-";
-			i++;
-			c = s.charAt(i);
-		} else if (c === "+") {
-			i++;
-			c = s.charAt(i);
-		}
-		while (c === "0") {
-			i++;
-			c = s.charAt(i);
-		}
-		while (c >= "0" && c <= "9") {
-			ret += c;
-			i++;
-			c = s.charAt(i);
-		}
-		if (c === ".") {
-			i++;
-			c = s.charAt(i);
-			dec = ret === "-" || ret === "" ? "0." : ".";
-		}
-		while (c >= "0" && c <= "9") {
-			if (c === "0") {
-				dec += c;
-			} else {
-				ret += dec + c;
-				dec = "";
-			}
-			i++;
-			c = s.charAt(i);
-		}
-		return ret === "-" || ret === "" ? "0" : ret;
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*[\-+]?([0-9]+(\.[0-9]*)?|[\-+]?\.[0-9]+)\s*$/.test(s)) {
+    s = s.trim();
+    var ret = "";
+    var i = 0;
+    var c = s.charAt(i);
+    var dec = "";
+    if (c === "-") {
+      ret = "-";
+      i++;
+      c = s.charAt(i);
+    } else if (c === "+") {
+      i++;
+      c = s.charAt(i);
+    }
+    while (c === "0") {
+      i++;
+      c = s.charAt(i);
+    }
+    while (c >= "0" && c <= "9") {
+      ret += c;
+      i++;
+      c = s.charAt(i);
+    }
+    if (c === ".") {
+      i++;
+      c = s.charAt(i);
+      dec = ret === "-" || ret === "" ? "0." : ".";
+    }
+    while (c >= "0" && c <= "9") {
+      if (c === "0") {
+        dec += c;
+      } else {
+        ret += dec + c;
+        dec = "";
+      }
+      i++;
+      c = s.charAt(i);
+    }
+    return ret === "-" || ret === "" ? "0" : ret;
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_float = new Fleur.TypeInfo_XMLSchema("float");
+Fleur.Type_float = new Fleur.TypeInfo_XMLSchema("float", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_float.atomizerName = "xs_float_1";
 Fleur.Type_float.canonicalize = function(s) {
-	if (/^\s*(([\-+]?([0-9]+(\.[0-9]*)?)|[\-+]?(\.[0-9]+))([eE][\-+]?[0-9]+)?|[\-+]?INF|NaN)\s*$/.test(s)) {
-		s = s.trim();
-		if (s === "+INF") {
-			s = "INF";
-		}
-		if (s !== "INF" && s !== "-INF" && s !== "NaN") {
-			var value = parseFloat(s);
-			if (value === Infinity) {
-				return "INF";
-			}
-			if (value === -Infinity) {
-				return "-INF";
-			}
-			if (1 / value === -Infinity) {
-				return "-0";
-			}
-			var absvalue = Math.abs(value);
-			if (absvalue < 0.000001 || absvalue >= 1000000) {
-				var ret;
-				if (absvalue >= 1000000 && absvalue < 1e+21) {
-					value *= 1e+15;
-					ret = String(value).split("e");
-					ret = ret[0] + "E" + String(parseInt(ret[1], 10) - 15);
-				} else {
-					ret = String(value).replace("e+", "E").replace("e", "E");
-				}
-				if (ret.indexOf(".") === -1 && ret.indexOf("E") !== -1) {
-					ret = ret.split("E");
-					return ret[0] + ".0E" + ret[1];
-				}
-				return ret;
-			}
-			return String(value);
-		}
-		return s;
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*(([\-+]?([0-9]+(\.[0-9]*)?)|[\-+]?(\.[0-9]+))([eE][\-+]?[0-9]+)?|[\-+]?INF|NaN)\s*$/.test(s)) {
+    s = s.trim();
+    if (s === "+INF") {
+      s = "INF";
+    }
+    if (s !== "INF" && s !== "-INF" && s !== "NaN") {
+      var value = parseFloat(s);
+      if (value === Infinity) {
+        return "INF";
+      }
+      if (value === -Infinity) {
+        return "-INF";
+      }
+      if (1 / value === -Infinity) {
+        return "-0";
+      }
+      var absvalue = Math.abs(value);
+      if (absvalue < 0.000001 || absvalue >= 1000000) {
+        var ret;
+        if (absvalue >= 1000000 && absvalue < 1e+21) {
+          value *= 1e+15;
+          ret = String(value).split("e");
+          ret = ret[0] + "E" + String(parseInt(ret[1], 10) - 15);
+        } else {
+          ret = String(value).replace("e+", "E").replace("e", "E");
+        }
+        if (ret.indexOf(".") === -1 && ret.indexOf("E") !== -1) {
+          ret = ret.split("E");
+          return ret[0] + ".0E" + ret[1];
+        }
+        return ret;
+      }
+      return String(value);
+    }
+    return s;
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_double = new Fleur.TypeInfo_XMLSchema("double");
+Fleur.Type_double = new Fleur.TypeInfo_XMLSchema("double", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_double.atomizerName = "xs_double_1";
 Fleur.Type_double.canonicalize = Fleur.Type_float.canonicalize;
-Fleur.Type_duration = new Fleur.TypeInfo_XMLSchema("duration");
+Fleur.Type_duration = new Fleur.TypeInfo_XMLSchema("duration", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_duration.canonicalize = function(s) {
-	if (/^\s*-?P(?!$)([0-9]+Y)?([0-9]+M)?([0-9]+D)?(T(?!$)([0-9]+H)?([0-9]+M)?([0-9]+(\.[0-9]+)?S)?)?\s*$/.test(s)) {
-		var dur = Fleur.toJSONDuration(s);
-		if (!dur.year && !dur.month && !dur.hour && !dur.minute && !dur.second) {
-			return "PT0S";
-		}
-		return s.trim();
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*-?P(?!$)([0-9]+Y)?([0-9]+M)?([0-9]+D)?(T(?!$)([0-9]+H)?([0-9]+M)?([0-9]+(\.[0-9]+)?S)?)?\s*$/.test(s)) {
+    var dur = Fleur.toJSONDuration(s);
+    if (!dur.year && !dur.month && !dur.hour && !dur.minute && !dur.second) {
+      return "PT0S";
+    }
+    return s.trim();
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_dateTime = new Fleur.TypeInfo_XMLSchema("dateTime");
+Fleur.Type_dateTime = new Fleur.TypeInfo_XMLSchema("dateTime", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_dateTime.atomizerName = "xs_dateTime_1";
 Fleur.Type_dateTime.canonicalize = function(s) {
-	if (/^\s*([0-9]{4})-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])T(24:00:00(\.0+)?|([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]+)?)(Z|[+\-]([01][0-9]|2[0-3]):[0-5][0-9])?\s*$/.test(s)) {
-		s = s.trim();
-		return Fleur.dateToDateTime(Fleur.toDateTime(s));
-	}
-	if (/^\s*-?[0-9]+-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])T(24:00:00(\.0+)?|([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]+)?)(Z|[+\-]([01][0-9]|2[0-3]):[0-5][0-9])?\s*$/.test(s)) {
-		throw new Fleur.DOMException(Fleur.DOMException.NOT_SUPPORTED_ERR);
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*([0-9]{4})-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])T(24:00:00(\.0+)?|([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]+)?)(Z|[+\-]([01][0-9]|2[0-3]):[0-5][0-9])?\s*$/.test(s)) {
+    s = s.trim();
+    return Fleur.dateToDateTime(Fleur.toDateTime(s));
+  }
+  if (/^\s*-?[0-9]+-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])T(24:00:00(\.0+)?|([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]+)?)(Z|[+\-]([01][0-9]|2[0-3]):[0-5][0-9])?\s*$/.test(s)) {
+    throw new Fleur.DOMException(Fleur.DOMException.NOT_SUPPORTED_ERR);
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_time = new Fleur.TypeInfo_XMLSchema("time");
+Fleur.Type_time = new Fleur.TypeInfo_XMLSchema("time", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_time.atomizerName = "xs_time_1";
 Fleur.Type_time.canonicalize = function(s) {
-	if (/^\s*(([0-9]{4})-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])T)?(24:00:00(\.0+)?|([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]+)?)(Z|[+\-]([01][0-9]|2[0-3]):[0-5][0-9])?\s*$/.test(s)) {
-		s = s.trim();
-		if (s.startsWith("24")) {
-			s = "00" + s.substr(2);
-		}
-		return Fleur.dateToTime(Fleur.toTime(s));
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*(([0-9]{4})-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])T)?(24:00:00(\.0+)?|([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]+)?)(Z|[+\-]([01][0-9]|2[0-3]):[0-5][0-9])?\s*$/.test(s)) {
+    s = s.trim();
+    if (s.startsWith("24")) {
+      s = "00" + s.substr(2);
+    }
+    return Fleur.dateToTime(Fleur.toTime(s));
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_date = new Fleur.TypeInfo_XMLSchema("date");
+Fleur.Type_date = new Fleur.TypeInfo_XMLSchema("date", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_date.atomizerName = "xs_date_1";
 Fleur.Type_date.canonicalize = function(s) {
-	if (/^\s*([0-9]{4})-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])(T(24:00:00(\.0+)?|([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]+)?))?(Z|[+\-]([01][0-9]|2[0-3]):[0-5][0-9])?\s*$/.test(s)) {
-		return Fleur.dateToDate(Fleur.toDate(s.trim()));
-	}
-	if (/^\s*-?[0-9]+-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])(T(24:00:00(\.0+)?|([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]+)?))?(Z|[+\-]([01][0-9]|2[0-3]):[0-5][0-9])?\s*$/.test(s)) {
-		throw new Fleur.DOMException(Fleur.DOMException.NOT_SUPPORTED_ERR);
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*([0-9]{4})-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])(T(24:00:00(\.0+)?|([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]+)?))?(Z|[+\-]([01][0-9]|2[0-3]):[0-5][0-9])?\s*$/.test(s)) {
+    return Fleur.dateToDate(Fleur.toDate(s.trim()));
+  }
+  if (/^\s*-?[0-9]+-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])(T(24:00:00(\.0+)?|([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]+)?))?(Z|[+\-]([01][0-9]|2[0-3]):[0-5][0-9])?\s*$/.test(s)) {
+    throw new Fleur.DOMException(Fleur.DOMException.NOT_SUPPORTED_ERR);
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_gYearMonth = new Fleur.TypeInfo_XMLSchema("gYearMonth");
+Fleur.Type_gYearMonth = new Fleur.TypeInfo_XMLSchema("gYearMonth", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_gYearMonth.atomizerName = "xs_gYearMonth_1";
 Fleur.Type_gYearMonth.canonicalize = function(s) {
-	if (/^\s*([0-9]{4})-(0[1-9]|1[012])\s*$/.test(s)) {
-		return s.trim();
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*([0-9]{4})-(0[1-9]|1[012])\s*$/.test(s)) {
+    return s.trim();
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_gYear = new Fleur.TypeInfo_XMLSchema("gYear");
+Fleur.Type_gYear = new Fleur.TypeInfo_XMLSchema("gYear", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_gYear.atomizerName = "xs_gYear_1";
 Fleur.Type_gYear.canonicalize = function(s) {
-	if (/^\s*([\-+]?([0-9]{4}|[1-9][0-9]{4,}))?\s*$/.test(s)) {
-		return s.trim();
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*([\-+]?([0-9]{4}|[1-9][0-9]{4,}))?\s*$/.test(s)) {
+    return s.trim();
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_gMonthDay = new Fleur.TypeInfo_XMLSchema("gMonthDay");
+Fleur.Type_gMonthDay = new Fleur.TypeInfo_XMLSchema("gMonthDay", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_gMonthDay.atomizerName = "xs_gMonthDay_1";
 Fleur.Type_gMonthDay.canonicalize = function(s) {
-	if (/^\s*--(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])\s*$/.test(s)) {
-		return s.trim();
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*--(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])\s*$/.test(s)) {
+    return s.trim();
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_gDay = new Fleur.TypeInfo_XMLSchema("gDay");
+Fleur.Type_gDay = new Fleur.TypeInfo_XMLSchema("gDay", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_gDay.atomizerName = "xs_gDay_1";
 Fleur.Type_gDay.canonicalize = function(s) {
-	if (/^\s*---(0[1-9]|[12][0-9]|3[01])\s*$/.test(s)) {
-		return s.trim();
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*---(0[1-9]|[12][0-9]|3[01])\s*$/.test(s)) {
+    return s.trim();
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_gMonth = new Fleur.TypeInfo_XMLSchema("gMonth");
+Fleur.Type_gMonth = new Fleur.TypeInfo_XMLSchema("gMonth", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_gMonth.atomizerName = "xs_gMonth_1";
 Fleur.Type_gMonth.canonicalize = function(s) {
-	if (/^\s*--(0[1-9]|1[012])\s*$/.test(s)) {
-		return s.trim();
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*--(0[1-9]|1[012])\s*$/.test(s)) {
+    return s.trim();
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_hexBinary = new Fleur.TypeInfo_XMLSchema("hexBinary");
+Fleur.Type_hexBinary = new Fleur.TypeInfo_XMLSchema("hexBinary", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_hexBinary.atomizerName = "xs_hexBinary_1";
 Fleur.Type_hexBinary.canonicalize = function(s) {
-	if (/^\s*([0-9A-Fa-f]{2})+\s*$/.test(s)) {
-		return s.trim().toUpperCase();
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*([0-9A-Fa-f]{2})+\s*$/.test(s)) {
+    return s.trim().toUpperCase();
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_base64Binary = new Fleur.TypeInfo_XMLSchema("base64Binary");
+Fleur.Type_base64Binary = new Fleur.TypeInfo_XMLSchema("base64Binary", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_base64Binary.atomizerName = "xs_base64Binary_1";
 Fleur.Type_base64Binary.canonicalize = function(s) {
-	if (/^\s*(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?\s*$/.test(s)) {
-		return s.trim();
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?\s*$/.test(s)) {
+    return s.trim();
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_anyURI = new Fleur.TypeInfo_XMLSchema("anyURI");
+Fleur.Type_anyURI = new Fleur.TypeInfo_XMLSchema("anyURI", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_anyURI.atomizerName = "xs_anyURI_1";
 Fleur.Type_anyURI.canonicalize = function(s) {
-	if (/^\s*((([^ :\/?#]+):\/\/)?[^ \/\?#]+([^ \?#]*)(\?([^ #]*))?(#([^ \:#\[\]\@\!\$\&\\'\(\)\*\+\,\;\=]*))?)?\s*$/.test(s)) {
-		return s.trim();
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*((([^ :\/?#]+):\/\/)?[^ \/\?#]+([^ \?#]*)(\?([^ #]*))?(#([^ \:#\[\]\@\!\$\&\\'\(\)\*\+\,\;\=]*))?)?\s*$/.test(s)) {
+    return s.trim();
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_QName = new Fleur.TypeInfo_XMLSchema("QName");
+Fleur.Type_QName = new Fleur.TypeInfo_XMLSchema("QName", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_anyAtomicType]]);
 Fleur.Type_QName.atomizerName = "xs_QName_1";
 Fleur.Type_QName.canonicalize = function(s) {
-	if (/^\s*[A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF][A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]*(\:[A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF][A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]*)?\s*$/.test(s)) {
-		return s.trim();
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*[A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF][A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]*(\:[A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF][A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]*)?\s*$/.test(s)) {
+    return s.trim();
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_normalizedString = new Fleur.TypeInfo_XMLSchema("normalizedString", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_string);
+Fleur.Type_normalizedString = new Fleur.TypeInfo_XMLSchema("normalizedString", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_string]]);
 Fleur.Type_normalizedString.atomizerName = "xs_normalizedString_1";
 Fleur.Type_normalizedString.canonicalize = function(s) {
-	return s.replace(/[\t\r\n]/g, " ");
+  return s.replace(/[\t\r\n]/g, " ");
 };
-Fleur.Type_token = new Fleur.TypeInfo_XMLSchema("token", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_normalizedString);
+Fleur.Type_token = new Fleur.TypeInfo_XMLSchema("token", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_normalizedString]]);
 Fleur.Type_token.atomizerName = "xs_token_1";
 Fleur.Type_token.canonicalize = function(s) {
-	return s.trim().replace(/\s+/g, " ");
+  return s.trim().replace(/\s+/g, " ");
 };
 Fleur.Type_NOTATION = new Fleur.TypeInfo_XMLSchema("NOTATION");
 Fleur.Type_NOTATION.atomizerName = "xs_NOTATION_1";
 Fleur.Type_NOTATION.canonicalize = Fleur.Type_token.canonicalize;
-Fleur.Type_language = new Fleur.TypeInfo_XMLSchema("language", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_token);
+Fleur.Type_language = new Fleur.TypeInfo_XMLSchema("language", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_token]]);
 Fleur.Type_language.canonicalize = function(s) {
-	if (/^\s*[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*\s*$/.test(s)) {
-		return s.trim();
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*[a-zA-Z]{1,8}(-[a-zA-Z0-9]{1,8})*\s*$/.test(s)) {
+    return s.trim();
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_NMTOKEN = new Fleur.TypeInfo_XMLSchema("NMTOKEN", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_token);
+Fleur.Type_NMTOKEN = new Fleur.TypeInfo_XMLSchema("NMTOKEN", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_token]]);
 Fleur.Type_NMTOKEN.atomizerName = "xs_NMTOKEN_1";
 Fleur.Type_NMTOKEN.canonicalize = function(s) {
-	if (/^\s*[A-Za-z_\:\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]+\s*$/.test(s)) {
-		return s.trim();
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*[A-Za-z_\:\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]+\s*$/.test(s)) {
+    return s.trim();
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_NMTOKENS = new Fleur.TypeInfo_XMLSchema("NMTOKENS", Fleur.TypeInfo.DERIVATION_LIST, Fleur.Type_NMTOKEN);
+Fleur.Type_NMTOKENS = new Fleur.TypeInfo_XMLSchema("NMTOKENS", [[Fleur.TypeInfo.DERIVATION_LIST, Fleur.Type_NMTOKEN]]);
 Fleur.Type_NMTOKENS.atomizerName = "xs_NMTOKENS_1";
 Fleur.Type_NMTOKENS.canonicalize = function(s) {
-	if (/^\s*[A-Za-z_\:\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]+(\s+[A-Za-z_\:\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]+)*\s*$/.test(s)) {
-		return s.trim().replace(/\s+/g, " ");
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*[A-Za-z_\:\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]+(\s+[A-Za-z_\:\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]+)*\s*$/.test(s)) {
+    return s.trim().replace(/\s+/g, " ");
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_Name = new Fleur.TypeInfo_XMLSchema("Name", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_token);
+Fleur.Type_Name = new Fleur.TypeInfo_XMLSchema("Name", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_token]]);
 Fleur.Type_Name.atomizerName = "xs_Name_1";
 Fleur.Type_Name.canonicalize = function(s) {
-	if (/^\s*[A-Za-z_\:\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF][A-Za-z_\:\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]*\s*$/.test(s)) {
-		return s.trim();
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*[A-Za-z_\:\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF][A-Za-z_\:\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]*\s*$/.test(s)) {
+    return s.trim();
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_NCName = new Fleur.TypeInfo_XMLSchema("NCName", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_Name);
+Fleur.Type_NCName = new Fleur.TypeInfo_XMLSchema("NCName", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_Name]]);
 Fleur.Type_NCName.atomizerName = "xs_NCName_1";
 Fleur.Type_NCName.canonicalize = function(s) {
-	if (/^\s*[A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF][A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]*\s*$/.test(s)) {
-		return s.trim();
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*[A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF][A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]*\s*$/.test(s)) {
+    return s.trim();
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_ID = new Fleur.TypeInfo_XMLSchema("ID", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_NCName);
+Fleur.Type_ID = new Fleur.TypeInfo_XMLSchema("ID", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_NCName]]);
 Fleur.Type_ID.atomizerName = "xs_ID_1";
 Fleur.Type_ID.canonicalize = Fleur.Type_NCName.canonicalize;
-Fleur.Type_IDREF = new Fleur.TypeInfo_XMLSchema("IDREF", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_NCName);
+Fleur.Type_IDREF = new Fleur.TypeInfo_XMLSchema("IDREF", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_NCName]]);
 Fleur.Type_IDREF.atomizerName = "xs_IDREF_1";
 Fleur.Type_IDREF.canonicalize = Fleur.Type_NCName.canonicalize;
-Fleur.Type_IDREFS = new Fleur.TypeInfo_XMLSchema("IDREFS", Fleur.TypeInfo.DERIVATION_LIST, Fleur.Type_IDREF);
+Fleur.Type_IDREFS = new Fleur.TypeInfo_XMLSchema("IDREFS", [[Fleur.TypeInfo.DERIVATION_LIST, Fleur.Type_IDREF]]);
 Fleur.Type_IDREFS.atomizerName = "xs_IDREFS_1";
 Fleur.Type_IDREFS.canonicalize = function(s) {
-	if (/^\s*[A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF][A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]*(\s+[A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF][A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]*)*\s*$/.test(s)) {
-		return s.trim().replace(/\s+/g, " ");
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*[A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF][A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]*(\s+[A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF][A-Za-z_\\xC0-\\xD6\\xD8-\\xF6\\xF8-\\xFF\\-\\.0-9\\xB7]*)*\s*$/.test(s)) {
+    return s.trim().replace(/\s+/g, " ");
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_ENTITY = new Fleur.TypeInfo_XMLSchema("ENTITY", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_NCName);
+Fleur.Type_ENTITY = new Fleur.TypeInfo_XMLSchema("ENTITY", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_NCName]]);
 Fleur.Type_ENTITY.atomizerName = "xs_ENTITY_1";
 Fleur.Type_ENTITY.canonicalize = Fleur.Type_NCName.canonicalize;
-Fleur.Type_ENTITIES = new Fleur.TypeInfo_XMLSchema("ENTITIES", Fleur.TypeInfo.DERIVATION_LIST, Fleur.Type_IDREFS);
+Fleur.Type_ENTITIES = new Fleur.TypeInfo_XMLSchema("ENTITIES", [[Fleur.TypeInfo.DERIVATION_LIST, Fleur.Type_ENTITY]]);
 Fleur.Type_ENTITIES.atomizerName = "xs_ENTITIES_1";
 Fleur.Type_ENTITIES.canonicalize = Fleur.Type_IDREFS.canonicalize;
-Fleur.Type_integer = new Fleur.TypeInfo_XMLSchema("integer", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_decimal);
+Fleur.Type_integer = new Fleur.TypeInfo_XMLSchema("integer", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_decimal]]);
 Fleur.Type_integer.atomizerName = "xs_integer_1";
 Fleur.Type_integer.canonicalize = function(s) {
-	if (/^\s*[\-+]?[0-9]+\s*$/.test(s)) {
-		s = s.trim();
-		var ret = "";
-		var i = 0;
-		var c = s.charAt(i);
-		if (c === "-") {
-			ret = "-";
-			i++;
-			c = s.charAt(i);
-		} else if (c === "+") {
-			i++;
-			c = s.charAt(i);
-		}
-		while (c === "0") {
-			i++;
-			c = s.charAt(i);
-		}
-		while (c >= "0" && c <= "9") {
-			ret += c;
-			i++;
-			c = s.charAt(i);
-		}
-		return ret === "-" || ret === "" ? "0" : ret;
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*[\-+]?[0-9]+\s*$/.test(s)) {
+    s = s.trim();
+    var ret = "";
+    var i = 0;
+    var c = s.charAt(i);
+    if (c === "-") {
+      ret = "-";
+      i++;
+      c = s.charAt(i);
+    } else if (c === "+") {
+      i++;
+      c = s.charAt(i);
+    }
+    while (c === "0") {
+      i++;
+      c = s.charAt(i);
+    }
+    while (c >= "0" && c <= "9") {
+      ret += c;
+      i++;
+      c = s.charAt(i);
+    }
+    return ret === "-" || ret === "" ? "0" : ret;
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_nonPositiveInteger = new Fleur.TypeInfo_XMLSchema("nonPositiveInteger", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_integer);
+Fleur.Type_numeric = new Fleur.TypeInfo_XMLSchema("numeric", [
+  [Fleur.TypeInfo.DERIVATION_UNION, Fleur.Type_integer],
+  [Fleur.TypeInfo.DERIVATION_UNION, Fleur.Type_decimal],
+  [Fleur.TypeInfo.DERIVATION_UNION, Fleur.Type_float],
+  [Fleur.TypeInfo.DERIVATION_UNION, Fleur.Type_double]
+]);
+Fleur.Type_nonPositiveInteger = new Fleur.TypeInfo_XMLSchema("nonPositiveInteger", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_integer]]);
 Fleur.Type_nonPositiveInteger.atomizerName = "xs_nonPositiveInteger_1";
 Fleur.Type_nonPositiveInteger.canonicalize = function(s) {
-	if (/^\s*(-[0-9]+|0)\s*$/.test(s)) {
-		s = s.trim();
-		var ret = "";
-		var i = 0;
-		var c = s.charAt(i);
-		if (c === "-") {
-			ret = "-";
-			i++;
-			c = s.charAt(i);
-		}
-		while (c === "0") {
-			i++;
-			c = s.charAt(i);
-		}
-		while (c >= "0" && c <= "9") {
-			ret += c;
-			i++;
-			c = s.charAt(i);
-		}
-		return ret === "-" || ret === "" ? "0" : ret;
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*(-[0-9]+|0)\s*$/.test(s)) {
+    s = s.trim();
+    var ret = "";
+    var i = 0;
+    var c = s.charAt(i);
+    if (c === "-") {
+      ret = "-";
+      i++;
+      c = s.charAt(i);
+    }
+    while (c === "0") {
+      i++;
+      c = s.charAt(i);
+    }
+    while (c >= "0" && c <= "9") {
+      ret += c;
+      i++;
+      c = s.charAt(i);
+    }
+    return ret === "-" || ret === "" ? "0" : ret;
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_negativeInteger = new Fleur.TypeInfo_XMLSchema("negativeInteger", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_nonPositiveInteger);
+Fleur.Type_negativeInteger = new Fleur.TypeInfo_XMLSchema("negativeInteger", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_nonPositiveInteger]]);
 Fleur.Type_negativeInteger.atomizerName = "xs_negativeInteger_1";
 Fleur.Type_negativeInteger.canonicalize = function(s) {
-	if (/^\s*-0*[1-9][0-9]*\s*$/.test(s)) {
-		s = s.trim();
-		var ret = "-";
-		var i = 1;
-		var c = s.charAt(i);
-		while (c === "0") {
-			i++;
-			c = s.charAt(i);
-		}
-		while (c >= "0" && c <= "9") {
-			ret += c;
-			i++;
-			c = s.charAt(i);
-		}
-		return ret;
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*-0*[1-9][0-9]*\s*$/.test(s)) {
+    s = s.trim();
+    var ret = "-";
+    var i = 1;
+    var c = s.charAt(i);
+    while (c === "0") {
+      i++;
+      c = s.charAt(i);
+    }
+    while (c >= "0" && c <= "9") {
+      ret += c;
+      i++;
+      c = s.charAt(i);
+    }
+    return ret;
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_long = new Fleur.TypeInfo_XMLSchema("long", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_integer);
+Fleur.Type_long = new Fleur.TypeInfo_XMLSchema("long", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_integer]]);
 Fleur.Type_long.atomizerName = "xs_long_1";
 Fleur.Type_long.canonicalize = function(s) {
-	if (/^\s*[\-+]?[0-9]+\s*$/.test(s)) {
-		s = s.trim();
-		var value = Fleur.BigInt(s);
-		if (value >= Fleur.BigInt("-9223372036854775808") && value <= Fleur.BigInt("9223372036854775807")) {
-			return String(value);
-		}
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*[\-+]?[0-9]+\s*$/.test(s)) {
+    s = s.trim();
+    var value = Fleur.BigInt(s);
+    if (value >= Fleur.BigInt("-9223372036854775808") && value <= Fleur.BigInt("9223372036854775807")) {
+      return String(value);
+    }
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_int = new Fleur.TypeInfo_XMLSchema("int", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_long);
+Fleur.Type_int = new Fleur.TypeInfo_XMLSchema("int", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_long]]);
 Fleur.Type_int.atomizerName = "xs_int_1";
 Fleur.Type_int.canonicalize = function(s) {
-	if (/^\s*[\-+]?[0-9]+\s*$/.test(s)) {
-		s = s.trim();
-		var value = parseInt(s, 10);
-		if (value >= -2147483648 && value <= 2147483647) {
-			return String(value);
-		}
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*[\-+]?[0-9]+\s*$/.test(s)) {
+    s = s.trim();
+    var value = parseInt(s, 10);
+    if (value >= -2147483648 && value <= 2147483647) {
+      return String(value);
+    }
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_short = new Fleur.TypeInfo_XMLSchema("short", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_int);
+Fleur.Type_short = new Fleur.TypeInfo_XMLSchema("short", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_int]]);
 Fleur.Type_short.atomizerName = "xs_short_1";
 Fleur.Type_short.canonicalize = function(s) {
-	if (/^\s*[\-+]?[0-9]+\s*$/.test(s)) {
-		s = s.trim();
-		var value = parseInt(s, 10);
-		if (value >= -32768 && value <= 32767) {
-			return String(value);
-		}
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*[\-+]?[0-9]+\s*$/.test(s)) {
+    s = s.trim();
+    var value = parseInt(s, 10);
+    if (value >= -32768 && value <= 32767) {
+      return String(value);
+    }
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_byte = new Fleur.TypeInfo_XMLSchema("byte", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_short);
+Fleur.Type_byte = new Fleur.TypeInfo_XMLSchema("byte", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_short]]);
 Fleur.Type_byte.atomizerName = "xs_byte_1";
 Fleur.Type_byte.canonicalize = function(s) {
-	if (/^\s*[\-+]?[0-9]+\s*$/.test(s)) {
-		s = s.trim();
-		var value = parseInt(s, 10);
-		if (value >= -128 && value <= 127) {
-			return String(value);
-		}
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*[\-+]?[0-9]+\s*$/.test(s)) {
+    s = s.trim();
+    var value = parseInt(s, 10);
+    if (value >= -128 && value <= 127) {
+      return String(value);
+    }
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_nonNegativeInteger = new Fleur.TypeInfo_XMLSchema("nonNegativeInteger", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_integer);
+Fleur.Type_nonNegativeInteger = new Fleur.TypeInfo_XMLSchema("nonNegativeInteger", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_integer]]);
 Fleur.Type_nonNegativeInteger.atomizerName = "xs_nonNegativeInteger_1";
 Fleur.Type_nonNegativeInteger.canonicalize = function(s) {
-	if (/^\s*(\+?[0-9]+|-0+)\s*$/.test(s)) {
-		s = s.trim();
-		var ret = "";
-		var i = 0;
-		var c = s.charAt(i);
-		if (c === "+" || c === "-") {
-			i++;
-			c = s.charAt(i);
-		}
-		while (c === "0") {
-			i++;
-			c = s.charAt(i);
-		}
-		while (c >= "0" && c <= "9") {
-			ret += c;
-			i++;
-			c = s.charAt(i);
-		}
-		return ret === "" ? "0" : ret;
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*(\+?[0-9]+|-0+)\s*$/.test(s)) {
+    s = s.trim();
+    var ret = "";
+    var i = 0;
+    var c = s.charAt(i);
+    if (c === "+" || c === "-") {
+      i++;
+      c = s.charAt(i);
+    }
+    while (c === "0") {
+      i++;
+      c = s.charAt(i);
+    }
+    while (c >= "0" && c <= "9") {
+      ret += c;
+      i++;
+      c = s.charAt(i);
+    }
+    return ret === "" ? "0" : ret;
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_unsignedLong = new Fleur.TypeInfo_XMLSchema("unsignedLong", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_nonNegativeInteger);
+Fleur.Type_unsignedLong = new Fleur.TypeInfo_XMLSchema("unsignedLong", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_nonNegativeInteger]]);
 Fleur.Type_unsignedLong.atomizerName = "xs_unsignedLong_1";
 Fleur.Type_unsignedLong.canonicalize = function(s) {
-	if (/^\s*(\+?[0-9]+|-0+)\s*$/.test(s)) {
-		s = s.trim();
-		var value = Fleur.BigInt(s);
-		if (value <= Fleur.BigInt("18446744073709551615")) {
-			return String(value);
-		}
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*(\+?[0-9]+|-0+)\s*$/.test(s)) {
+    s = s.trim();
+    var value = Fleur.BigInt(s);
+    if (value <= Fleur.BigInt("18446744073709551615")) {
+      return String(value);
+    }
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_unsignedInt = new Fleur.TypeInfo_XMLSchema("unsignedInt", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_unsignedLong);
+Fleur.Type_unsignedInt = new Fleur.TypeInfo_XMLSchema("unsignedInt", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_unsignedLong]]);
 Fleur.Type_unsignedInt.atomizerName = "xs_unsignedInt_1";
 Fleur.Type_unsignedInt.canonicalize = function(s) {
-	if (/^\s*(\+?[0-9]+|-0+)\s*$/.test(s)) {
-		s = s.trim();
-		var value = parseInt(s, 10);
-		if (value <= 4294967295) {
-			return String(value);
-		}
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*(\+?[0-9]+|-0+)\s*$/.test(s)) {
+    s = s.trim();
+    var value = parseInt(s, 10);
+    if (value <= 4294967295) {
+      return String(value);
+    }
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_unsignedShort = new Fleur.TypeInfo_XMLSchema("unsignedShort", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_unsignedInt);
+Fleur.Type_unsignedShort = new Fleur.TypeInfo_XMLSchema("unsignedShort", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_unsignedInt]]);
 Fleur.Type_unsignedShort.atomizerName = "xs_unsignedShort_1";
 Fleur.Type_unsignedShort.canonicalize = function(s) {
-	if (/^\s*(\+?[0-9]+|-0+)\s*$/.test(s)) {
-		s = s.trim();
-		var value = parseInt(s, 10);
-		if (value <= 65535) {
-			return String(value);
-		}
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*(\+?[0-9]+|-0+)\s*$/.test(s)) {
+    s = s.trim();
+    var value = parseInt(s, 10);
+    if (value <= 65535) {
+      return String(value);
+    }
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_unsignedByte = new Fleur.TypeInfo_XMLSchema("unsignedByte", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_unsignedShort);
+Fleur.Type_unsignedByte = new Fleur.TypeInfo_XMLSchema("unsignedByte", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_unsignedShort]]);
 Fleur.Type_unsignedByte.atomizerName = "xs_unsignedByte_1";
 Fleur.Type_unsignedByte.canonicalize = function(s) {
-	if (/^\s*(\+?[0-9]+|-0+)\s*$/.test(s)) {
-		s = s.trim();
-		var value = parseInt(s, 10);
-		if (value <= 255) {
-			return String(value);
-		}
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*(\+?[0-9]+|-0+)\s*$/.test(s)) {
+    s = s.trim();
+    var value = parseInt(s, 10);
+    if (value <= 255) {
+      return String(value);
+    }
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_positiveInteger = new Fleur.TypeInfo_XMLSchema("positiveInteger", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_nonNegativeInteger);
+Fleur.Type_positiveInteger = new Fleur.TypeInfo_XMLSchema("positiveInteger", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_nonNegativeInteger]]);
 Fleur.Type_positiveInteger.atomizerName = "xs_positiveInteger_1";
 Fleur.Type_positiveInteger.canonicalize = function(s) {
-	if (/^\s*\+?0*[1-9][0-9]*\s*$/.test(s)) {
-		s = s.trim();
-		var ret = "";
-		var i = 0;
-		var c = s.charAt(i);
-		if (c === "+") {
-			i++;
-			c = s.charAt(i);
-		}
-		while (c === "0") {
-			i++;
-			c = s.charAt(i);
-		}
-		while (c >= "0" && c <= "9") {
-			ret += c;
-			i++;
-			c = s.charAt(i);
-		}
-		return ret === "" ? "0" : ret;
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*\+?0*[1-9][0-9]*\s*$/.test(s)) {
+    s = s.trim();
+    var ret = "";
+    var i = 0;
+    var c = s.charAt(i);
+    if (c === "+") {
+      i++;
+      c = s.charAt(i);
+    }
+    while (c === "0") {
+      i++;
+      c = s.charAt(i);
+    }
+    while (c >= "0" && c <= "9") {
+      ret += c;
+      i++;
+      c = s.charAt(i);
+    }
+    return ret === "" ? "0" : ret;
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_yearMonthDuration = new Fleur.TypeInfo_XMLSchema("yearMonthDuration", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_duration);
+Fleur.Type_yearMonthDuration = new Fleur.TypeInfo_XMLSchema("yearMonthDuration", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_duration]]);
 Fleur.Type_yearMonthDuration.atomizerName = "xs_yearMonthDuration_1";
 Fleur.Type_yearMonthDuration.canonicalize = function(s) {
-	if (/^\s*-?P(?!$)([0-9]+Y)?([0-9]+M)?\s*$/.test(s)) {
-		var res = Fleur.toJSONYearMonthDuration(s.trim());
-		return (res.sign < 0 ? "-" : "") + "P" + (res.year !== 0 ? String(res.year) + "Y": "") + (res.month !== 0 ? String(res.month) + "M" : (res.year === 0 ? "T0S": ""));
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*-?P(?!$)([0-9]+Y)?([0-9]+M)?\s*$/.test(s)) {
+    var res = Fleur.toJSONYearMonthDuration(s.trim());
+    return (res.sign < 0 ? "-" : "") + "P" + (res.year !== 0 ? String(res.year) + "Y": "") + (res.month !== 0 ? String(res.month) + "M" : (res.year === 0 ? "T0S": ""));
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_dayTimeDuration = new Fleur.TypeInfo_XMLSchema("dayTimeDuration", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_duration);
+Fleur.Type_dayTimeDuration = new Fleur.TypeInfo_XMLSchema("dayTimeDuration", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_duration]]);
 Fleur.Type_dayTimeDuration.atomizerName = "xs_dayTimeDuration_1";
 Fleur.Type_dayTimeDuration.canonicalize = function(s) {
-	if (/^\s*-?P(?!$)([0-9]+D)?(T(?!$)([0-9]+H)?([0-9]+M)?([0-9]+(\.[0-9]+)?S)?)?\s*$/.test(s)) {
-		var res = Fleur.toJSONDayTimeDuration(s.trim());
-		return (res.sign < 0 ? "-" : "") + "P" + (res.day !== 0 ? String(res.day) + "D": "") + (res.hour !== 0 || res.minute !== 0 || res.second !== 0 || (res.day + res.hour + res.minute + res.second) === 0 ? "T" : "") + (res.hour !== 0 ? String(res.hour) + "H" : "") + (res.minute !== 0 ? String(res.minute) + "M" : "") + (res.second !== 0 || (res.day + res.hour + res.minute + res.second) === 0 ? String(res.second) + "S" : "");
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*-?P(?!$)([0-9]+D)?(T(?!$)([0-9]+H)?([0-9]+M)?([0-9]+(\.[0-9]+)?S)?)?\s*$/.test(s)) {
+    var res = Fleur.toJSONDayTimeDuration(s.trim());
+    return (res.sign < 0 ? "-" : "") + "P" + (res.day !== 0 ? String(res.day) + "D": "") + (res.hour !== 0 || res.minute !== 0 || res.second !== 0 || (res.day + res.hour + res.minute + res.second) === 0 ? "T" : "") + (res.hour !== 0 ? String(res.hour) + "H" : "") + (res.minute !== 0 ? String(res.minute) + "M" : "") + (res.second !== 0 || (res.day + res.hour + res.minute + res.second) === 0 ? String(res.second) + "S" : "");
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-Fleur.Type_dateTimeStamp = new Fleur.TypeInfo_XMLSchema("dateTimeStamp", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_dateTime);
+Fleur.Type_dateTimeStamp = new Fleur.TypeInfo_XMLSchema("dateTimeStamp", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_dateTime]]);
 Fleur.Type_dateTimeStamp.atomizerName = "xs_dateTimeStamp_1";
 Fleur.Type_dateTimeStamp.canonicalize = function(s) {
-	if (/^\s*([012][0-9]{3})-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]+)?(Z|[+\-]([01][0-9]|2[0-3]):[0-5][0-9])\s*$/.test(s)) {
-		return s.trim();
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*([012][0-9]{3})-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])T([01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](\.[0-9]+)?(Z|[+\-]([01][0-9]|2[0-3]):[0-5][0-9])\s*$/.test(s)) {
+    return s.trim();
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
 Fleur.Types["http://www.agencexml.com/fleur"] = {};
-new Fleur.TypeInfo("http://www.agencexml.com/fleur", "regex", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_string);
+new Fleur.TypeInfo("http://www.agencexml.com/fleur", "regex", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_string]]);
 Fleur.Type_regex = Fleur.Types["http://www.agencexml.com/fleur"].regex;
 new Fleur.TypeInfo("http://www.agencexml.com/fleur", "handler");
 Fleur.Type_handler = Fleur.Types["http://www.agencexml.com/fleur"].handler;
 Fleur.Types["https://tools.ietf.org/rfc/index"] = {};
-new Fleur.TypeInfo("https://tools.ietf.org/rfc/index", "ipv4", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_string);
+new Fleur.TypeInfo("https://tools.ietf.org/rfc/index", "ipv4", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_string]]);
 Fleur.Type_ipv4 = Fleur.Types["https://tools.ietf.org/rfc/index"].ipv4;
 Fleur.Type_ipv4.canonicalize = function(s) {
-	if (/^\s*((1?[0-9]?[0-9]|2[0-4][0-9]|25[0-5]).){3}(1?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\s*$/.test(s)) {
-		return s.trim();
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*((1?[0-9]?[0-9]|2[0-4][0-9]|25[0-5]).){3}(1?[0-9]?[0-9]|2[0-4][0-9]|25[0-5])\s*$/.test(s)) {
+    return s.trim();
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
-new Fleur.TypeInfo("https://tools.ietf.org/rfc/index", "mac", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_string);
+new Fleur.TypeInfo("https://tools.ietf.org/rfc/index", "mac", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_string]]);
 Fleur.Type_mac = Fleur.Types["https://tools.ietf.org/rfc/index"].mac;
-new Fleur.TypeInfo("https://tools.ietf.org/rfc/index", "port", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_unsignedShort);
+new Fleur.TypeInfo("https://tools.ietf.org/rfc/index", "port", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_unsignedShort]]);
 Fleur.Type_port = Fleur.Types["https://tools.ietf.org/rfc/index"].port;
 Fleur.Type_port.canonicalize = function(s) {
-	if (/^\s*[0-9]+\s*$/.test(s)) {
-		var value = parseInt(s.trim(), 10);
-		if (value <= 65535) {
-			return String(value);
-		}
-	}
-	throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
+  if (/^\s*[0-9]+\s*$/.test(s)) {
+    var value = parseInt(s.trim(), 10);
+    if (value <= 65535) {
+      return String(value);
+    }
+  }
+  throw new Fleur.DOMException(Fleur.DOMException.VALIDATION_ERR);
 };
 Fleur.Types["http://www.agencexml.com/fleur/unit"] = {};
-new Fleur.TypeInfo("http://www.agencexml.com/fleur/unit", "information", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_string);
+new Fleur.TypeInfo("http://www.agencexml.com/fleur/unit", "information", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_string]]);
 Fleur.Type_unit_information = Fleur.Types["http://www.agencexml.com/fleur/unit"].information;
 Fleur.Type_unit_information.canonicalize = function(s) {
-	return s;
+  return s;
 };
 Fleur.Types["http://www.w3.org/2005/xquery"] = {};
-new Fleur.TypeInfo("http://www.w3.org/2005/xquery", "main-module", Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_string);
+new Fleur.TypeInfo("http://www.w3.org/2005/xquery", "main-module", [[Fleur.TypeInfo.DERIVATION_RESTRICTION, Fleur.Type_string]]);
 Fleur.Type_xquery_main_module = Fleur.Types["http://www.w3.org/2005/xquery"]["main-module"];
 Fleur.Type_xquery_main_module.canonicalize = function(s) {
-	Fleur.createExpression(s);
-	return s;
+  Fleur.createExpression(s);
+  return s;
 };
 Fleur.numericTypes = [Fleur.Type_integer, Fleur.Type_decimal, Fleur.Type_float, Fleur.Type_double];
 Fleur.atomicTypes = [];
@@ -6276,25 +6277,32 @@ Fleur.XMLSerializer.prototype.serializeToString = function(node, indent) {
 	return Fleur.Serializer.prototype.serializeToString.call(this, node, "application/xml", indent);
 };
 Fleur.Transpiler = function(ctxvarname, step) {
-	this.ctxvarname = ctxvarname;
-	this.step = step;
-	this.indent = "";
-	this.async = false;
+  this.ctxvarname = ctxvarname;
+  this.step = step;
+  this.indent = "";
+  this.async = false;
 };
-Fleur.Transpiler.prototype.inst = function(s, isasync, atomicType) {
-	return "\n" + this.indent + (isasync ? "await " : "") + this.ctxvarname + "." + s + ";" + (atomicType && atomicType.atomizerName ? this.inst(atomicType.atomizerName + "()") : atomicType === Fleur.atomicTypes ? this.inst("atomize()") : "");
+Fleur.Transpiler.prototype.inst = function(s, isasync, expectedType, preinst) {
+  return {
+    inst: (preinst || "") + "\n" + this.indent + (isasync ? "await " : "") + this.ctxvarname + "." + s + ";",
+    sequenceType: expectedType
+  };
 };
-Fleur.Transpiler.prototype.gen = function(arr, atomicType) {
-  return this[Fleur.XQueryXNames[1][arr[0]][2].replace(":", "_")](arr[1], atomicType);
+Fleur.Transpiler.prototype.gen = function(arr, expectedType) {
+  return this[Fleur.XQueryXNames[1][arr[0]][2].replace(":", "_")](arr[1], expectedType);
 };
-Fleur.Transpiler.prototype.funcdef = function(arr) {
-	const previndent  = this.indent;
-	this.indent += this.step;
-	let result = this.gen(arr);
-	result += "\n" + this.indent + "return "+ this.ctxvarname + ";";
-	result += "\n" + previndent + "}";
-	this.indent = previndent;
-	return (this.indent === "" ? "" : "\n") + this.indent + (this.async ? "async " : "") + this.ctxvarname + " => {" + result;
+Fleur.Transpiler.prototype.funcdef = function(arr, expectedType) {
+  const previndent  = this.indent;
+  this.indent += this.step;
+  const gen = this.gen(arr, expectedType);
+  let result = gen.inst;
+  result += "\n" + this.indent + "return "+ this.ctxvarname + ";";
+  result += "\n" + previndent + "}";
+  this.indent = previndent;
+  return {
+    inst: (this.indent === "" ? "" : "\n") + this.indent + (this.async ? "async " : "") + this.ctxvarname + " => {" + result,
+    sequenceType: gen.sequenceType
+  };
 };
 Fleur.Context = function(path, rs, nodedeps, xfdeps, position) {
   this.item = null;
@@ -6623,375 +6631,438 @@ Fleur.XPathFunctions_bin["xor#2"] = new Fleur.Function("http://expath.org/ns/bin
 Fleur.signatures.fn_abs_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_double, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.fn_abs_1 = function() {
   if (this.item.isNotEmpty()) {
     const op  = Fleur.toJSValue(this.item, true, false, false, false, false, false);
     if (op[0] >= 0) {
-			const a = op[1];
-			const a2 = op[1] < 0 ? -op[1] : op[1]
-			const t = this.item.schemaTypeInfo;
+      const a2 = op[1] < 0 ? -op[1] : op[1]
+      const t = this.item.schemaTypeInfo;
       this.item.data = String(a2);
-			let t2;
-			switch (t.getPrimitiveType([Fleur.Type_nonPositiveInteger, Fleur.Type_negativeInteger, Fleur.Type_byte, Fleur.Type_short, Fleur.Type_int, Fleur.Type_long], Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
-				case Fleur.Type_nonPositiveInteger:
-					t2 = Fleur.Type_nonNegativeInteger;
-					break;
-				case Fleur.Type_negativeInteger:
-					t2 = Fleur.Type_positiveInteger;
-					break;
-				case Fleur.Type_byte:
-					t2 = a2 === Fleur.BigInt(128) ? Fleur.Type_short : Fleur.Type_byte;
-					break;
-				case Fleur.Type_short:
-					t2 = a2 === Fleur.BigInt(32768) ? Fleur.Type_int : Fleur.Type_short;
-					break;
-				case Fleur.Type_int:
-					t2 = a2 === Fleur.BigInt(2147483648) ? Fleur.Type_long : Fleur.Type_int;
-					break;
-				case Fleur.Type_long:
-					t2 = a2 === Fleur.BigInt(9223372036854775808) ? Fleur.Type_integer : Fleur.Type_long;
-					break;
-				default:
-					t2 = t;
-			}
-			this.item.schemaTypeInfo = t2;
+      let t2;
+      switch (t.getPrimitiveType([Fleur.Type_nonPositiveInteger, Fleur.Type_negativeInteger, Fleur.Type_byte, Fleur.Type_short, Fleur.Type_int, Fleur.Type_long], Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
+        case Fleur.Type_nonPositiveInteger:
+          t2 = Fleur.Type_nonNegativeInteger;
+          break;
+        case Fleur.Type_negativeInteger:
+          t2 = Fleur.Type_positiveInteger;
+          break;
+        case Fleur.Type_byte:
+          t2 = a2 === Fleur.BigInt(128) ? Fleur.Type_short : Fleur.Type_byte;
+          break;
+        case Fleur.Type_short:
+          t2 = a2 === Fleur.BigInt(32768) ? Fleur.Type_int : Fleur.Type_short;
+          break;
+        case Fleur.Type_int:
+          t2 = a2 === Fleur.BigInt(2147483648) ? Fleur.Type_long : Fleur.Type_int;
+          break;
+        case Fleur.Type_long:
+          t2 = a2 === Fleur.BigInt(9223372036854775808) ? Fleur.Type_integer : Fleur.Type_long;
+          break;
+        default:
+          t2 = t;
+      }
+      this.item.schemaTypeInfo = t2;
     }
   }
   return this;
 };
 Fleur.XPathFunctions_fn["abs#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:abs",
-	function(arg) {
-		if (arg === null) {
-			return [null, null];
-		}
-		var a = arg[0];
-		var t = arg[1];
-		var a2, t2;
-		a2 = a < 0 ? -a : a;
-		switch (t.getPrimitiveType([Fleur.Type_nonPositiveInteger, Fleur.Type_negativeInteger, Fleur.Type_byte, Fleur.Type_short, Fleur.Type_int, Fleur.Type_long], Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
-			case Fleur.Type_nonPositiveInteger:
-				t2 = Fleur.Type_nonNegativeInteger;
-				break;
-			case Fleur.Type_negativeInteger:
-				t2 = Fleur.Type_positiveInteger;
-				break;
-			case Fleur.Type_byte:
-				t2 = a2 === Fleur.BigInt(128) ? Fleur.Type_short : Fleur.Type_byte;
-				break;
-			case Fleur.Type_short:
-				t2 = a2 === Fleur.BigInt(32768) ? Fleur.Type_int : Fleur.Type_short;
-				break;
-			case Fleur.Type_int:
-				t2 = a2 === Fleur.BigInt(2147483648) ? Fleur.Type_long : Fleur.Type_int;
-				break;
-			case Fleur.Type_long:
-				t2 = a2 === Fleur.BigInt(9223372036854775808) ? Fleur.Type_integer : Fleur.Type_long;
-				break;
-			default:
-				t2 = t;
-		}
-		return [a2, t2];
-	},
-	null, [{type: Fleur.numericTypes, adaptative: true, occurence: "?"}], false, false, {type: Fleur.numericTypes, adaptative: true, occurence: "?"});
+  function(arg) {
+    if (arg === null) {
+      return [null, null];
+    }
+    var a = arg[0];
+    var t = arg[1];
+    var a2, t2;
+    a2 = a < 0 ? -a : a;
+    switch (t.getPrimitiveType([Fleur.Type_nonPositiveInteger, Fleur.Type_negativeInteger, Fleur.Type_byte, Fleur.Type_short, Fleur.Type_int, Fleur.Type_long], Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
+      case Fleur.Type_nonPositiveInteger:
+        t2 = Fleur.Type_nonNegativeInteger;
+        break;
+      case Fleur.Type_negativeInteger:
+        t2 = Fleur.Type_positiveInteger;
+        break;
+      case Fleur.Type_byte:
+        t2 = a2 === Fleur.BigInt(128) ? Fleur.Type_short : Fleur.Type_byte;
+        break;
+      case Fleur.Type_short:
+        t2 = a2 === Fleur.BigInt(32768) ? Fleur.Type_int : Fleur.Type_short;
+        break;
+      case Fleur.Type_int:
+        t2 = a2 === Fleur.BigInt(2147483648) ? Fleur.Type_long : Fleur.Type_int;
+        break;
+      case Fleur.Type_long:
+        t2 = a2 === Fleur.BigInt(9223372036854775808) ? Fleur.Type_integer : Fleur.Type_long;
+        break;
+      default:
+        t2 = t;
+    }
+    return [a2, t2];
+  },
+  null, [{type: Fleur.numericTypes, adaptative: true, occurence: "?"}], false, false, {type: Fleur.numericTypes, adaptative: true, occurence: "?"});
 Fleur.signatures.fn_adjust$_date$_to$_timezone_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_date, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_date,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_date, occurence: "?"},
-    {type: Fleur.Type_dayTimeDuration, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_date,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_dayTimeDuration,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.fn_adjust$_date$_to$_timezone_1 = function() {
-	if (this.item.isNotEmpty()) {
-		var dt = Fleur.toDate(this.item.data);
-		var jstz = dt.d.getTimezoneOffset();
-		this.itemstack.push(this.item);
-		this.item = new Fleur.Text();
-		this.item.data = Fleur.msToDayTimeDuration(-jstz * 60 * 1000);
-		this.item.schemaTypeInfo = Fleur.Type_dayTimeDuration;
-		this.fn_adjust$_dateTime$_to$_timezone_2(true);
-	}
-	return this;
+  if (this.item.isNotEmpty()) {
+    var dt = Fleur.toDate(this.item.data);
+    var jstz = dt.d.getTimezoneOffset();
+    this.itemstack.push(this.item);
+    this.item = new Fleur.Text();
+    this.item.data = Fleur.msToDayTimeDuration(-jstz * 60 * 1000);
+    this.item.schemaTypeInfo = Fleur.Type_dayTimeDuration;
+    this.fn_adjust$_dateTime$_to$_timezone_2(true);
+  }
+  return this;
 };
 Fleur.Context.prototype.fn_adjust$_date$_to$_timezone_2 = function() {
-	this.fn_adjust$_dateTime$_to$_timezone_2(true);
-	return this;
+  this.fn_adjust$_dateTime$_to$_timezone_2(true);
+  return this;
 };
 Fleur.XPathFunctions_fn["adjust-date-to-timezone#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:adjust-date-to-timezone",
-	function(arg) {
-		if (arg === null) {
-			return null;
-		}
-		var dt = Fleur.toDate(arg);
-		var jstz = dt.d.getTimezoneOffset();
-		var timezone = {
-			sign: jstz < 0 ? 1 : -1,
-			day: 0,
-			hour: Math.floor(Math.abs(jstz) / 60),
-			minute: Math.abs(jstz) % 60,
-			second: 0
-		};
-		return Fleur.XPathFunctions_fn["adjust-dateTime-to-timezone#2"].jsfunc(arg, timezone, true, false);
-	},
-	null, [{type: Fleur.Type_date, occurence: "?"}], false, false, {type: Fleur.Type_date, occurence: "?"});
+  function(arg) {
+    if (arg === null) {
+      return null;
+    }
+    var dt = Fleur.toDate(arg);
+    var jstz = dt.d.getTimezoneOffset();
+    var timezone = {
+      sign: jstz < 0 ? 1 : -1,
+      day: 0,
+      hour: Math.floor(Math.abs(jstz) / 60),
+      minute: Math.abs(jstz) % 60,
+      second: 0
+    };
+    return Fleur.XPathFunctions_fn["adjust-dateTime-to-timezone#2"].jsfunc(arg, timezone, true, false);
+  },
+  null, [{type: Fleur.Type_date, occurence: "?"}], false, false, {type: Fleur.Type_date, occurence: "?"});
 Fleur.XPathFunctions_fn["adjust-date-to-timezone#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:adjust-date-to-timezone",
-	function(arg, timezone) {
-		return Fleur.XPathFunctions_fn["adjust-dateTime-to-timezone#2"].jsfunc(arg, timezone, true, false);
-	},
-	null, [{type: Fleur.Type_date, occurence: "?"}, {type: Fleur.Type_dayTimeDuration, occurence: "?"}], false, false, {type: Fleur.Type_date, occurence: "?"});
+  function(arg, timezone) {
+    return Fleur.XPathFunctions_fn["adjust-dateTime-to-timezone#2"].jsfunc(arg, timezone, true, false);
+  },
+  null, [{type: Fleur.Type_date, occurence: "?"}, {type: Fleur.Type_dayTimeDuration, occurence: "?"}], false, false, {type: Fleur.Type_date, occurence: "?"});
 Fleur.signatures.fn_adjust$_dateTime$_to$_timezone_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_date, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_date,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_dateTime, occurence: "?"},
-    {type: Fleur.Type_dayTimeDuration, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_dateTime,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_dayTimeDuration,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.fn_adjust$_dateTime$_to$_timezone_1 = function() {
-	if (this.item.isNotEmpty()) {
-		var dt = Fleur.toDateTime(this.item.data);
-		var jstz = dt.d.getTimezoneOffset();
-		this.itemstack.push(this.item);
-		this.item = new Fleur.Text();
-		this.item.data = Fleur.msToDayTimeDuration(-jstz * 60 * 1000);
-		this.item.schemaTypeInfo = Fleur.Type_dayTimeDuration;
-		this.fn_adjust$_dateTime$_to$_timezone_2();
-	}
-	return this;
+  if (this.item.isNotEmpty()) {
+    var dt = Fleur.toDateTime(this.item.data);
+    var jstz = dt.d.getTimezoneOffset();
+    this.itemstack.push(this.item);
+    this.item = new Fleur.Text();
+    this.item.data = Fleur.msToDayTimeDuration(-jstz * 60 * 1000);
+    this.item.schemaTypeInfo = Fleur.Type_dayTimeDuration;
+    this.fn_adjust$_dateTime$_to$_timezone_2();
+  }
+  return this;
 };
 Fleur.Context.prototype.fn_adjust$_date$_to$_timezone_2 = function(noTime, noDate) {
   const arg2 = this.item;
   const arg1 = this.itemstack.pop();
-	if (arg1.isNotEmpty()) {
-		let dt;
-		if (noTime) {
-			dt = Fleur.toDate(arg1);
-		} else if (noDate) {
-			dt = Fleur.toTime(arg1);
-		} else {
-			dt = Fleur.toDateTime(arg1);
-		}
-		const timezone = arg2;
-		if (timezone) {
-			if (timezone.second !== 0 || timezone.day !== 0 || timezone.hour > 14 || (timezone.hour === 14 && timezone.minute !== 0)) {
-				Fleur.XQueryError_xqt("FODT0003");
-			}
-			if (dt.tz !== null) {
-				dt.d.setHours(dt.d.getHours() + timezone.sign * timezone.hour - Math.floor(dt.tz / 60));
-				dt.d.setMinutes(dt.d.getMinutes() + timezone.sign * timezone.minute - (dt.tz % 60));
-			}
-			dt.tz = timezone.sign * (timezone.hour * 60 + timezone.minute);
-		} else {
-			dt.tz = null;
-		}
-		var res;
-		if (noTime) {
-			this.item.data = Fleur.dateToDate(dt);
-		} else if (noDate) {
-			this.item.data = Fleur.dateToTime(dt);
-		} else {
-			this.item.data = Fleur.dateToDateTime(dt);
-		}
-	}
-	return this;
+  if (arg1.isNotEmpty()) {
+    let dt;
+    if (noTime) {
+      dt = Fleur.toDate(arg1);
+    } else if (noDate) {
+      dt = Fleur.toTime(arg1);
+    } else {
+      dt = Fleur.toDateTime(arg1);
+    }
+    const timezone = arg2;
+    if (timezone) {
+      if (timezone.second !== 0 || timezone.day !== 0 || timezone.hour > 14 || (timezone.hour === 14 && timezone.minute !== 0)) {
+        Fleur.XQueryError_xqt("FODT0003");
+      }
+      if (dt.tz !== null) {
+        dt.d.setHours(dt.d.getHours() + timezone.sign * timezone.hour - Math.floor(dt.tz / 60));
+        dt.d.setMinutes(dt.d.getMinutes() + timezone.sign * timezone.minute - (dt.tz % 60));
+      }
+      dt.tz = timezone.sign * (timezone.hour * 60 + timezone.minute);
+    } else {
+      dt.tz = null;
+    }
+    var res;
+    if (noTime) {
+      this.item.data = Fleur.dateToDate(dt);
+    } else if (noDate) {
+      this.item.data = Fleur.dateToTime(dt);
+    } else {
+      this.item.data = Fleur.dateToDateTime(dt);
+    }
+  }
+  return this;
 };
 Fleur.XPathFunctions_fn["adjust-dateTime-to-timezone#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:adjust-dateTime-to-timezone",
-	function(arg) {
-		if (arg === null) {
-			return null;
-		}
-		var dt = Fleur.toDateTime(arg);
-		var jstz = dt.d.getTimezoneOffset();
-		var timezone = {
-			sign: jstz < 0 ? 1 : -1,
-			day: 0,
-			hour: Math.floor(Math.abs(jstz) / 60),
-			minute: Math.abs(jstz) % 60,
-			second: 0
-		};
-		return Fleur.XPathFunctions_fn["adjust-dateTime-to-timezone#2"].jsfunc(arg, timezone, false, false);
-	},
-	null, [{type: Fleur.Type_dateTime, occurence: "?"}], false, false, {type: Fleur.Type_dateTime, occurence: "?"});
+  function(arg) {
+    if (arg === null) {
+      return null;
+    }
+    var dt = Fleur.toDateTime(arg);
+    var jstz = dt.d.getTimezoneOffset();
+    var timezone = {
+      sign: jstz < 0 ? 1 : -1,
+      day: 0,
+      hour: Math.floor(Math.abs(jstz) / 60),
+      minute: Math.abs(jstz) % 60,
+      second: 0
+    };
+    return Fleur.XPathFunctions_fn["adjust-dateTime-to-timezone#2"].jsfunc(arg, timezone, false, false);
+  },
+  null, [{type: Fleur.Type_dateTime, occurence: "?"}], false, false, {type: Fleur.Type_dateTime, occurence: "?"});
 Fleur.XPathFunctions_fn["adjust-dateTime-to-timezone#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:adjust-dateTime-to-timezone",
-	function(arg, timezone, notime, nodate) {
-		var dt;
-		if (arg === null) {
-			return null;
-		}
-		if (notime) {
-			dt = Fleur.toDate(arg);
-		} else if (nodate) {
-			dt = Fleur.toTime(arg);
-		} else {
-			dt = Fleur.toDateTime(arg);
-		}
-		if (timezone) {
-			if (timezone.second !== 0 || timezone.day !== 0 || timezone.hour > 14 || (timezone.hour === 14 && timezone.minute !== 0)) {
-				var e = new Error("");
-				e.name = "FODT0003";
-				return e;
-			}
-			if (dt.tz !== null) {
-				dt.d.setHours(dt.d.getHours() + timezone.sign * timezone.hour - Math.floor(dt.tz / 60));
-				dt.d.setMinutes(dt.d.getMinutes() + timezone.sign * timezone.minute - (dt.tz % 60));
-			}
-			dt.tz = timezone.sign * (timezone.hour * 60 + timezone.minute);
-		} else {
-			dt.tz = null;
-		}
-		var res;
-		if (notime) {
-			res = Fleur.dateToDate(dt);
-		} else if (nodate) {
-			res = Fleur.dateToTime(dt);
-		} else {
-			res = Fleur.dateToDateTime(dt);
-		}
-		return res;
-	},
-	null, [{type: Fleur.Type_dateTime, occurence: "?"}, {type: Fleur.Type_dayTimeDuration, occurence: "?"}], false, false, {type: Fleur.Type_dateTime, occurence: "?"});
+  function(arg, timezone, notime, nodate) {
+    var dt;
+    if (arg === null) {
+      return null;
+    }
+    if (notime) {
+      dt = Fleur.toDate(arg);
+    } else if (nodate) {
+      dt = Fleur.toTime(arg);
+    } else {
+      dt = Fleur.toDateTime(arg);
+    }
+    if (timezone) {
+      if (timezone.second !== 0 || timezone.day !== 0 || timezone.hour > 14 || (timezone.hour === 14 && timezone.minute !== 0)) {
+        var e = new Error("");
+        e.name = "FODT0003";
+        return e;
+      }
+      if (dt.tz !== null) {
+        dt.d.setHours(dt.d.getHours() + timezone.sign * timezone.hour - Math.floor(dt.tz / 60));
+        dt.d.setMinutes(dt.d.getMinutes() + timezone.sign * timezone.minute - (dt.tz % 60));
+      }
+      dt.tz = timezone.sign * (timezone.hour * 60 + timezone.minute);
+    } else {
+      dt.tz = null;
+    }
+    var res;
+    if (notime) {
+      res = Fleur.dateToDate(dt);
+    } else if (nodate) {
+      res = Fleur.dateToTime(dt);
+    } else {
+      res = Fleur.dateToDateTime(dt);
+    }
+    return res;
+  },
+  null, [{type: Fleur.Type_dateTime, occurence: "?"}, {type: Fleur.Type_dayTimeDuration, occurence: "?"}], false, false, {type: Fleur.Type_dateTime, occurence: "?"});
 Fleur.signatures.fn_adjust$_time$_to$_timezone_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_time, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_time,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_time, occurence: "?"},
-    {type: Fleur.Type_dayTimeDuration, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_time,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_dayTimeDuration,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.fn_adjust$_time$_to$_timezone_1 = function() {
-	if (this.item.isNotEmpty()) {
-		var dt = Fleur.toTime(this.item.data);
-		var jstz = dt.d.getTimezoneOffset();
-		this.itemstack.push(this.item);
-		this.item = new Fleur.Text();
-		this.item.data = Fleur.msToDayTimeDuration(-jstz * 60 * 1000);
-		this.item.schemaTypeInfo = Fleur.Type_dayTimeDuration;
-		this.fn_adjust$_dateTime$_to$_timezone_2(false, true);
-	}
-	return this;
+  if (this.item.isNotEmpty()) {
+    var dt = Fleur.toTime(this.item.data);
+    var jstz = dt.d.getTimezoneOffset();
+    this.itemstack.push(this.item);
+    this.item = new Fleur.Text();
+    this.item.data = Fleur.msToDayTimeDuration(-jstz * 60 * 1000);
+    this.item.schemaTypeInfo = Fleur.Type_dayTimeDuration;
+    this.fn_adjust$_dateTime$_to$_timezone_2(false, true);
+  }
+  return this;
 };
 Fleur.Context.prototype.fn_adjust$_time$_to$_timezone_2 = function() {
-	this.fn_adjust$_dateTime$_to$_timezone_2(false, true);
-	return this;
+  this.fn_adjust$_dateTime$_to$_timezone_2(false, true);
+  return this;
 };
 Fleur.XPathFunctions_fn["adjust-time-to-timezone#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:adjust-time-to-timezone",
-	function(arg) {
-		if (arg === null) {
-			return null;
-		}
-		var dt = Fleur.toTime(arg);
-		var jstz = dt.d.getTimezoneOffset();
-		var timezone = {
-			sign: jstz < 0 ? 1 : -1,
-			day: 0,
-			hour: Math.floor(Math.abs(jstz) / 60),
-			minute: Math.abs(jstz) % 60,
-			second: 0
-		};
-		return Fleur.XPathFunctions_fn["adjust-dateTime-to-timezone#2"].jsfunc(arg, timezone, false, true);
-	},
-	null, [{type: Fleur.Type_time, occurence: "?"}], false, false, {type: Fleur.Type_time, occurence: "?"});
+  function(arg) {
+    if (arg === null) {
+      return null;
+    }
+    var dt = Fleur.toTime(arg);
+    var jstz = dt.d.getTimezoneOffset();
+    var timezone = {
+      sign: jstz < 0 ? 1 : -1,
+      day: 0,
+      hour: Math.floor(Math.abs(jstz) / 60),
+      minute: Math.abs(jstz) % 60,
+      second: 0
+    };
+    return Fleur.XPathFunctions_fn["adjust-dateTime-to-timezone#2"].jsfunc(arg, timezone, false, true);
+  },
+  null, [{type: Fleur.Type_time, occurence: "?"}], false, false, {type: Fleur.Type_time, occurence: "?"});
 Fleur.XPathFunctions_fn["adjust-time-to-timezone#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:adjust-time-to-timezone",
-	function(arg, timezone) {
-		return Fleur.XPathFunctions_fn["adjust-dateTime-to-timezone#2"].jsfunc(arg, timezone, false, true);
-	},
-	null, [{type: Fleur.Type_time, occurence: "?"}, {type: Fleur.Type_dayTimeDuration, occurence: "?"}], false, false, {type: Fleur.Type_time, occurence: "?"});
+  function(arg, timezone) {
+    return Fleur.XPathFunctions_fn["adjust-dateTime-to-timezone#2"].jsfunc(arg, timezone, false, true);
+  },
+  null, [{type: Fleur.Type_time, occurence: "?"}, {type: Fleur.Type_dayTimeDuration, occurence: "?"}], false, false, {type: Fleur.Type_time, occurence: "?"});
+Fleur.signatures.fn_avg_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_anyAtomicType,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anyAtomicType,
+      occurrence: "*"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["avg#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:avg",
-	function(arg) {
-		if (arg === null) {
-			return [null, null];
-		}
-		if (arg[0] instanceof Array) {
-			var r = arg.reduce(function(p, c) {
-				var rt;
-				if (c[1] === Fleur.Type_untypedAtomic) {
-					c[1] = Fleur.Type_double;
-				}
-				if (!p[1]) {
-					return c;
-				}
-				rt = p[1].compareType(c[1], Fleur.TypeInfo.DERIVATION_RESTRICTION);
-				if (!rt) {
-					if (p[1].isDerivedFrom("http://www.w3.org/2001/XMLSchema", "float", Fleur.TypeInfo.DERIVATION_RESTRICTION) || c[1].isDerivedFrom("http://www.w3.org/2001/XMLSchema", "float", Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
-						if (p[1].isDerivedFrom("http://www.w3.org/2001/XMLSchema", "double", Fleur.TypeInfo.DERIVATION_RESTRICTION) || c[1].isDerivedFrom("http://www.w3.org/2001/XMLSchema", "double", Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
-							rt = Fleur.Type_double;
-						} else {
-							rt = Fleur.Type_float;
-						}
-					} else {
-						rt = Fleur.Type_double;
-					}
-				}
-				if (typeof p[0] !== typeof c[0]) {
-					p[0] = Number(p[0]);
-					c[0] = Number(c[0]);
-				}
-				return [p[0] + c[0], rt];
-			}, [0, null]);
-			var argl = typeof r[0] === "number" ? arg.length : Fleur.BigInt(arg.length);
-			var v = r[0] / argl;
-			var t = r[1];
-			if (t.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "integer", Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
-				if (r[0] !== v * argl) {
-					v = Number(r[0]) / Number(argl);
-					t = Fleur.Type_decimal;
-				}
-			}
-			return [v, t];
-		}
-		if (arg[1] === Fleur.Type_untypedAtomic) {
-			arg[1] = Fleur.Type_double;
-		}
-		return arg;
-	},
-	null, [{type: Fleur.numericTypes, adaptative: true, occurence: "*"}], false, false, {type: Fleur.numericTypes, adaptative: true, occurence: "?"});
+  function(arg) {
+    if (arg === null) {
+      return [null, null];
+    }
+    if (arg[0] instanceof Array) {
+      var r = arg.reduce(function(p, c) {
+        var rt;
+        if (c[1] === Fleur.Type_untypedAtomic) {
+          c[1] = Fleur.Type_double;
+        }
+        if (!p[1]) {
+          return c;
+        }
+        rt = p[1].compareType(c[1], Fleur.TypeInfo.DERIVATION_RESTRICTION);
+        if (!rt) {
+          if (p[1].isDerivedFrom("http://www.w3.org/2001/XMLSchema", "float", Fleur.TypeInfo.DERIVATION_RESTRICTION) || c[1].isDerivedFrom("http://www.w3.org/2001/XMLSchema", "float", Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
+            if (p[1].isDerivedFrom("http://www.w3.org/2001/XMLSchema", "double", Fleur.TypeInfo.DERIVATION_RESTRICTION) || c[1].isDerivedFrom("http://www.w3.org/2001/XMLSchema", "double", Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
+              rt = Fleur.Type_double;
+            } else {
+              rt = Fleur.Type_float;
+            }
+          } else {
+            rt = Fleur.Type_double;
+          }
+        }
+        if (typeof p[0] !== typeof c[0]) {
+          p[0] = Number(p[0]);
+          c[0] = Number(c[0]);
+        }
+        return [p[0] + c[0], rt];
+      }, [0, null]);
+      var argl = typeof r[0] === "number" ? arg.length : Fleur.BigInt(arg.length);
+      var v = r[0] / argl;
+      var t = r[1];
+      if (t.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "integer", Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
+        if (r[0] !== v * argl) {
+          v = Number(r[0]) / Number(argl);
+          t = Fleur.Type_decimal;
+        }
+      }
+      return [v, t];
+    }
+    if (arg[1] === Fleur.Type_untypedAtomic) {
+      arg[1] = Fleur.Type_double;
+    }
+    return arg;
+  },
+  null, [{type: Fleur.numericTypes, adaptative: true, occurence: "*"}], false, false, {type: Fleur.numericTypes, adaptative: true, occurence: "?"});
 Fleur.signatures.fn_base_$uri_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_boolean},
-  params_type: [
-    Fleur.Node
-  ]
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_anyURI,
+    occurrence: "?"
+  },
+  params_type: [null]
 };
 Fleur.Context.prototype.fn_base_$uri_1 = function() {
 };
 Fleur.XPathFunctions_fn["base-uri#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:base-uri",
-	function(ctx) {
-		return Fleur.XPathFunctions_fn["base-uri#1"].jsfunc(ctx._curr);
-	},
-	null, [], true, false, {type: Fleur.Type_anyURI});
+  function(ctx) {
+    return Fleur.XPathFunctions_fn["base-uri#1"].jsfunc(ctx._curr);
+  },
+  null, [], true, false, {type: Fleur.Type_anyURI});
 Fleur.XPathFunctions_fn["base-uri#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:base-uri",
-	function(node) {
-		if (node === Fleur.EmptySequence) {
-			return null;
-		}
-		if ((node.nodeType === Fleur.Node.TEXT_NODE && node.schemaTypeInfo !== Fleur.Type_untypedAtomic) || node.nodeType === Fleur.Node.FUNCTION_NODE) {
-			var e = new Error("");
-			e.name = "XPTY0004";
-			return e;
-		}
-		return "";
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_anyURI});
+  function(node) {
+    if (node === Fleur.EmptySequence) {
+      return null;
+    }
+    if ((node.nodeType === Fleur.Node.TEXT_NODE && node.schemaTypeInfo !== Fleur.Type_untypedAtomic) || node.nodeType === Fleur.Node.FUNCTION_NODE) {
+      var e = new Error("");
+      e.name = "XPTY0004";
+      return e;
+    }
+    return "";
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_anyURI});
 Fleur.signatures.fn_boolean_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_boolean},
-  params_type: [
-    Fleur.Node
-  ]
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_boolean,
+    occurrence: "?"
+  },
+  params_type: [null]
 };
 Fleur.Context.prototype.fn_boolean_1 = function() {
-	const newitem = new Fleur.Text();
-	newitem.schemaTypeInfo = Fleur.Type_boolean;
+  const newitem = new Fleur.Text();
+  newitem.schemaTypeInfo = Fleur.Type_boolean;
   if (this.item.isEmpty()) {
     newitem.appendData("false");
     this.item = newitem;
@@ -7030,54 +7101,62 @@ Fleur.Context.prototype.fn_boolean_1 = function() {
   return this;
 };
 Fleur.XPathFunctions_fn["boolean#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:boolean",
-	function(arg) {
-		var e;
-		if (arg === Fleur.EmptySequence) {
-			return false;
-		}
-		if (arg.nodeType === Fleur.Node.SEQUENCE_NODE) {
-			if (arg.childNodes.length === 0) {
-				return false;
-			}
-			if (arg.childNodes[0].nodeType !== Fleur.Node.TEXT_NODE || arg.childNodes[0].ownerDocument) {
-				return true;
-			}
-			e = new Error("The supplied sequence contains values inappropriate to fn:boolean");
-			e.name = "FORG0006";
-			return e;
-		}
-		if (arg.nodeType !== Fleur.Node.TEXT_NODE) {
-			return true;
-		}
-		if (arg.schemaTypeInfo === Fleur.Type_boolean) {
-			return arg.data === "true";
-		}
-		if (arg.schemaTypeInfo === Fleur.Type_string || arg.schemaTypeInfo === Fleur.Type_untypedAtomic || arg.schemaTypeInfo === Fleur.Type_anyURI) {
-			return arg.hasOwnProperty("data") && arg.data.length !== 0;
-		}
-		if (arg.schemaTypeInfo === Fleur.Type_integer || arg.schemaTypeInfo === Fleur.Type_decimal || arg.schemaTypeInfo === Fleur.Type_float || arg.schemaTypeInfo === Fleur.Type_double) {
-			return arg.data !== "0" && arg.data !== "0.0" && arg.data !== "0.0e0" && arg.data !== "NaN";
-		}
-		if (arg.schemaTypeInfo && arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "boolean", Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
-			return arg.data === "true";
-		}
-		if (arg.schemaTypeInfo && (arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "string", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "untypedAtomic", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "anyURI", Fleur.TypeInfo.DERIVATION_RESTRICTION))) {
-			return arg.hasOwnProperty("data") && arg.data.length !== 0;
-		}
-		if (arg.schemaTypeInfo && (arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "integer", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "decimal", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "float", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "double", Fleur.TypeInfo.DERIVATION_RESTRICTION))) {
-			return arg.data !== "0" && arg.data !== "0.0" && arg.data !== "0.0e0" && arg.data !== "NaN";
-		}
-		e = new Error("The supplied sequence contains values inappropriate to fn:boolean");
-		e.name = "FORG0006";
-		return e;
-	},
-	null, [{type: Fleur.Node, occurence: "*"}], true, false, {type: Fleur.Type_boolean});
+  function(arg) {
+    var e;
+    if (arg === Fleur.EmptySequence) {
+      return false;
+    }
+    if (arg.nodeType === Fleur.Node.SEQUENCE_NODE) {
+      if (arg.childNodes.length === 0) {
+        return false;
+      }
+      if (arg.childNodes[0].nodeType !== Fleur.Node.TEXT_NODE || arg.childNodes[0].ownerDocument) {
+        return true;
+      }
+      e = new Error("The supplied sequence contains values inappropriate to fn:boolean");
+      e.name = "FORG0006";
+      return e;
+    }
+    if (arg.nodeType !== Fleur.Node.TEXT_NODE) {
+      return true;
+    }
+    if (arg.schemaTypeInfo === Fleur.Type_boolean) {
+      return arg.data === "true";
+    }
+    if (arg.schemaTypeInfo === Fleur.Type_string || arg.schemaTypeInfo === Fleur.Type_untypedAtomic || arg.schemaTypeInfo === Fleur.Type_anyURI) {
+      return arg.hasOwnProperty("data") && arg.data.length !== 0;
+    }
+    if (arg.schemaTypeInfo === Fleur.Type_integer || arg.schemaTypeInfo === Fleur.Type_decimal || arg.schemaTypeInfo === Fleur.Type_float || arg.schemaTypeInfo === Fleur.Type_double) {
+      return arg.data !== "0" && arg.data !== "0.0" && arg.data !== "0.0e0" && arg.data !== "NaN";
+    }
+    if (arg.schemaTypeInfo && arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "boolean", Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
+      return arg.data === "true";
+    }
+    if (arg.schemaTypeInfo && (arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "string", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "untypedAtomic", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "anyURI", Fleur.TypeInfo.DERIVATION_RESTRICTION))) {
+      return arg.hasOwnProperty("data") && arg.data.length !== 0;
+    }
+    if (arg.schemaTypeInfo && (arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "integer", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "decimal", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "float", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "double", Fleur.TypeInfo.DERIVATION_RESTRICTION))) {
+      return arg.data !== "0" && arg.data !== "0.0" && arg.data !== "0.0e0" && arg.data !== "NaN";
+    }
+    e = new Error("The supplied sequence contains values inappropriate to fn:boolean");
+    e.name = "FORG0006";
+    return e;
+  },
+  null, [{type: Fleur.Node, occurence: "*"}], true, false, {type: Fleur.Type_boolean});
 Fleur.signatures.fn_ceiling_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_double, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.fn_ceiling_1 = function() {
@@ -7091,64 +7170,130 @@ Fleur.Context.prototype.fn_ceiling_1 = function() {
   return this;
 };
 Fleur.XPathFunctions_fn["ceiling#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:ceiling",
-	function(a) {
-		return a ? [typeof a[0] === "bigint" ? a[0] : Math.ceil(a[0]), a[1]] : null;
-	},
-	null, [{type: Fleur.numericTypes, adaptative: true, occurence: "?"}], false, false, {type: Fleur.numericTypes, adaptative: true, occurence: "?"});
+  function(a) {
+    return a ? [typeof a[0] === "bigint" ? a[0] : Math.ceil(a[0]), a[1]] : null;
+  },
+  null, [{type: Fleur.numericTypes, adaptative: true, occurence: "?"}], false, false, {type: Fleur.numericTypes, adaptative: true, occurence: "?"});
+Fleur.signatures.fn_codepoint$_equal_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_boolean,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["codepoint-equal#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:codepoint-equal",
-	function(comparand1, comparand2) {
-		return comparand1 === null || comparand2 === null ? null : comparand1 === comparand2;
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_boolean, occurence: "?"});
+  function(comparand1, comparand2) {
+    return comparand1 === null || comparand2 === null ? null : comparand1 === comparand2;
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_boolean, occurence: "?"});
+Fleur.signatures.fn_codepoint$_to$_string_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "1"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_integer,
+      occurrence: "*"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["codepoints-to-string#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:codepoints-to-string",
-	function(arg) {
-		if (arg === null) {
-			return "";
-		}
-		if (arg instanceof Array) {
-			try {
-				return arg.reduce(function(a, v) {
-					if (v < 1 || v > 655535) {
-						var e = new Error("codepoints-to-string(): the input contains an integer that is not the codepoint of a valid XML character");
-						e.name = "FOCH0001";
-						throw e;
-					}
-					return a + String.fromCodePoint(Number(v));
-				}, "");
-			} catch(err) {
-				return err;
-			}
-		}
-		if (arg < 1 || arg > 655535) {
-			var e = new Error("codepoints-to-string(): the input contains an integer that is not the codepoint of a valid XML character");
-			e.name = "FOCH0001";
-			return e;
-		}
-		return String.fromCodePoint(Number(arg));
-	},
-	null, [{type: Fleur.Type_integer, occurence: "*"}], false, false, {type: Fleur.Type_string});
+  function(arg) {
+    if (arg === null) {
+      return "";
+    }
+    if (arg instanceof Array) {
+      try {
+        return arg.reduce(function(a, v) {
+          if (v < 1 || v > 655535) {
+            var e = new Error("codepoints-to-string(): the input contains an integer that is not the codepoint of a valid XML character");
+            e.name = "FOCH0001";
+            throw e;
+          }
+          return a + String.fromCodePoint(Number(v));
+        }, "");
+      } catch(err) {
+        return err;
+      }
+    }
+    if (arg < 1 || arg > 655535) {
+      var e = new Error("codepoints-to-string(): the input contains an integer that is not the codepoint of a valid XML character");
+      e.name = "FOCH0001";
+      return e;
+    }
+    return String.fromCodePoint(Number(arg));
+  },
+  null, [{type: Fleur.Type_integer, occurence: "*"}], false, false, {type: Fleur.Type_string});
+Fleur.signatures.fn_compare_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["compare#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:compare",
-	function(comparand1, comparand2) {
-		return comparand1 === null || comparand2 === null ? null : comparand1 === comparand2 ? 0 : comparand1 < comparand2 ? -1 : 1;
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_integer, occurence: "?"});
+  function(comparand1, comparand2) {
+    return comparand1 === null || comparand2 === null ? null : comparand1 === comparand2 ? 0 : comparand1 < comparand2 ? -1 : 1;
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_integer, occurence: "?"});
 Fleur.XPathFunctions_fn["compare#3"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:compare",
-	function(comparand1, comparand2, collation) {
-		var c = Fleur.getCollation(collation);
-		if (!c) {
-			var e = new Error("");
-			e.name = "FOCH0002";
-			return e;
-		}
-		return comparand1 === null || comparand2 === null ? null : c.equals(comparand1, comparand2) ? 0 : c.lessThan(comparand1, comparand2) ? -1 : 1;
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_integer, occurence: "?"});
+  function(comparand1, comparand2, collation) {
+    var c = Fleur.getCollation(collation);
+    if (!c) {
+      var e = new Error("");
+      e.name = "FOCH0002";
+      return e;
+    }
+    return comparand1 === null || comparand2 === null ? null : c.equals(comparand1, comparand2) ? 0 : c.lessThan(comparand1, comparand2) ? -1 : 1;
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_integer, occurence: "?"});
 Fleur.signatures.fn_concat = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_string},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "1"
+  },
   params_type: [
-    {type: Fleur.Type_string, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.fn_concat = function(count) {
@@ -7157,121 +7302,160 @@ Fleur.Context.prototype.fn_concat = function(count) {
     this.item.data = "";
     this.item.schemaTypeInfo = Fleur.Type_string;
   }
-	for (let i = 1; i < count; i++) {
-		const arg = this.itemstack.pop();
-		if (arg.isNotEmpty()) {
-			this.item.data = arg.data + this.item.data;
-		}
-	}
+  for (let i = 1; i < count; i++) {
+    const arg = this.itemstack.pop();
+    if (arg.isNotEmpty()) {
+      this.item.data = arg.data + this.item.data;
+    }
+  }
   return this;
 };
 Fleur.XPathFunctions_fn["concat#"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:concat",
-	function() {
-		var s = "";
-		var e;
-		for (var i = 0, l = arguments.length; i < l; i++) {
-			var n = arguments[i];
-			if (n !== Fleur.EmptySequence && n.nodeType === Fleur.Node.SEQUENCE_NODE) {
-				e = new Error("The dynamic type of a value does not match a required type for Q{http://www.w3.org/2005/xpath-functions}concat#" + String(l));
-				e.name = "XPTY0004";
-				return e;
-			}
-			if (n.nodeType === Fleur.Node.FUNCTION_NODE) {
-				e = new Error("The dynamic type of a value does not match a required type for Q{http://www.w3.org/2005/xpath-functions}concat#" + String(l));
-				e.name = "FOTY0013";
-				return e;
-			}
-			var a = Fleur.Atomize(n);
-			if (a.schemaTypeInfo === Fleur.Type_error) {
-				return a;
-			}
-			s += a.data || "";
-		}
-		return s;
-	},
-	null, [], false, false, {type: Fleur.Type_string});
+  function() {
+    var s = "";
+    var e;
+    for (var i = 0, l = arguments.length; i < l; i++) {
+      var n = arguments[i];
+      if (n !== Fleur.EmptySequence && n.nodeType === Fleur.Node.SEQUENCE_NODE) {
+        e = new Error("The dynamic type of a value does not match a required type for Q{http://www.w3.org/2005/xpath-functions}concat#" + String(l));
+        e.name = "XPTY0004";
+        return e;
+      }
+      if (n.nodeType === Fleur.Node.FUNCTION_NODE) {
+        e = new Error("The dynamic type of a value does not match a required type for Q{http://www.w3.org/2005/xpath-functions}concat#" + String(l));
+        e.name = "FOTY0013";
+        return e;
+      }
+      var a = Fleur.Atomize(n);
+      if (a.schemaTypeInfo === Fleur.Type_error) {
+        return a;
+      }
+      s += a.data || "";
+    }
+    return s;
+  },
+  null, [], false, false, {type: Fleur.Type_string});
  Fleur.signatures.fn_contains_2 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_boolean},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_boolean,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_string, occurence: "?"},
-    {type: Fleur.Type_string, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.fn_contains_2 = function() {
   const arg2 = this.item;
   const arg1 = this.itemstack.pop();
   if (arg2.isNotEmpty()) {
-		if (arg1.isNotEmpty()) {
-    	this.item.data = String(arg1.data.indexOf(arg2.data) !== -1);
-		} else {
-			this.item = new Fleur.Text();
-			this.item.data = String(arg2.data.length === 0);
-		}
+    if (arg1.isNotEmpty()) {
+      this.item.data = String(arg1.data.indexOf(arg2.data) !== -1);
+    } else {
+      this.item = new Fleur.Text();
+      this.item.data = String(arg2.data.length === 0);
+    }
   } else {
-		this.item = new Fleur.Text();
-		this.item.data = "true";
-	}
-	this.item.schemaTypeInfo = Fleur.Type_boolean;
+    this.item = new Fleur.Text();
+    this.item.data = "true";
+  }
+  this.item.schemaTypeInfo = Fleur.Type_boolean;
   return this;
 };
 Fleur.XPathFunctions_fn["contains#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:contains",
-	function(a, b) {
-		return !b ? true : !a ? false : a.indexOf(b) !== -1;
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_boolean});
+  function(a, b) {
+    return !b ? true : !a ? false : a.indexOf(b) !== -1;
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_boolean});
 Fleur.XPathFunctions_fn["contains#3"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:contains",
-	function(a, b, collation) {
-		var c = Fleur.getCollation(collation);
-		if (!c) {
-			var e = new Error("");
-			e.name = "FOCH0002";
-			return e;
-		}
-		return !b ? true : !a ? false : c.contains(a, b);
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_boolean});
+  function(a, b, collation) {
+    var c = Fleur.getCollation(collation);
+    if (!c) {
+      var e = new Error("");
+      e.name = "FOCH0002";
+      return e;
+    }
+    return !b ? true : !a ? false : c.contains(a, b);
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_boolean});
+Fleur.signatures.fn_contains$_token_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_boolean,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "*"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["contains-token#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:contains-token",
-	function(input, token) {
-		return Fleur.XPathFunctions_fn["contains-token#3"].jsfunc(input, token, "http://www.w3.org/2005/xpath-functions/collation/codepoint");
-	},
-	null, [{type: Fleur.Type_string, occurence: "*"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_boolean});
+  function(input, token) {
+    return Fleur.XPathFunctions_fn["contains-token#3"].jsfunc(input, token, "http://www.w3.org/2005/xpath-functions/collation/codepoint");
+  },
+  null, [{type: Fleur.Type_string, occurence: "*"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_boolean});
 Fleur.XPathFunctions_fn["contains-token#3"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:contains-token",
-	function(input, token, collation) {
-		var c = Fleur.getCollation(collation);
-		if (!c) {
-			var e = new Error("");
-			e.name = "FOCH0002";
-			return e;
-		}
-		if (!input || input === "") {
-			return false;
-		}
-		token = token.trim();
-		if (token === "") {
-			return false;
-		}
-		if (!(input instanceof Array)) {
-			input = [input];
-		}
-		for (var i1 = 0, l1 = input.length; i1 < l1; i1++) {
-			input[i1] = input[i1].split(" ");
-			for (var i2 = 0, l2 = input[i1].length; i2 < l2; i2++) {
-				if ( c.equals(input[i1][i2], token)) {
-					return true;
-				}
-			}
-		}
-		return false;
-	},
-	null, [{type: Fleur.Type_string, occurence: "*"}, {type: Fleur.Type_string}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_boolean});
+  function(input, token, collation) {
+    var c = Fleur.getCollation(collation);
+    if (!c) {
+      var e = new Error("");
+      e.name = "FOCH0002";
+      return e;
+    }
+    if (!input || input === "") {
+      return false;
+    }
+    token = token.trim();
+    if (token === "") {
+      return false;
+    }
+    if (!(input instanceof Array)) {
+      input = [input];
+    }
+    for (var i1 = 0, l1 = input.length; i1 < l1; i1++) {
+      input[i1] = input[i1].split(" ");
+      for (var i2 = 0, l2 = input[i1].length; i2 < l2; i2++) {
+        if ( c.equals(input[i1][i2], token)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  },
+  null, [{type: Fleur.Type_string, occurence: "*"}, {type: Fleur.Type_string}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_boolean});
 Fleur.signatures.fn_count_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_integer},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "1"
+  },
   params_type: [
-    {type: Fleur.Node, occurence: "*"}
+    {
+      occurrence: "*"
+    }
   ]
 };
 Fleur.Context.prototype.fn_count_1 = function() {
@@ -7286,278 +7470,423 @@ Fleur.XPathFunctions_fn["count#1"] = new Fleur.Function("http://www.w3.org/2005/
     return arg === Fleur.EmptySequence ? 0 : arg.nodeType === Fleur.Node.SEQUENCE_NODE ? arg.childNodes.length : 1;
   },
   null, [{type: Fleur.Node, occurence: "*"}], false, false, {type: Fleur.Type_integer});
+Fleur.signatures.fn_current_0 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: null,
+  params_type: []
+};
 Fleur.XPathFunctions_fn["current#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:current",
-	function(ctx) {
-		return ctx._item || ctx._curr;
-	},
-	null, [], true, false, {type: Fleur.Node});
+  function(ctx) {
+    return ctx._item || ctx._curr;
+  },
+  null, [], true, false, {type: Fleur.Node});
+Fleur.signatures.fn_current$_date_0 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_date,
+    occurrence: "1"
+  },
+  params_type: []
+};
 Fleur.XPathFunctions_fn["current-date#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:current-date",
-	function(ctx) {
-		return ctx.env.now;
-	},
-	null, [], true, false, {type: Fleur.Type_date});
+  function(ctx) {
+    return ctx.env.now;
+  },
+  null, [], true, false, {type: Fleur.Type_date});
+Fleur.signatures.fn_current$_dateTime_0 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_dateTime,
+    occurrence: "1"
+  },
+  params_type: []
+};
 Fleur.XPathFunctions_fn["current-dateTime#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:current-dateTime",
-	function(ctx) {
-		return ctx.env.now;
-	},
-	null, [], true, false, {type: Fleur.Type_dateTime});
+  function(ctx) {
+    return ctx.env.now;
+  },
+  null, [], true, false, {type: Fleur.Type_dateTime});
+Fleur.signatures.fn_current$_time_0 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_time,
+    occurrence: "1"
+  },
+  params_type: []
+};
 Fleur.XPathFunctions_fn["current-time#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:current-time",
-	function(ctx) {
-		return ctx.env.now;
-	},
-	null, [], true, false, {type: Fleur.Type_time});
+  function(ctx) {
+    return ctx.env.now;
+  },
+  null, [], true, false, {type: Fleur.Type_time});
+Fleur.signatures.fn_data_0 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: null,
+  params_type: []
+};
 Fleur.XPathFunctions_fn["data#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:data",
-	function(ctx) {
-		return Fleur.XPathFunctions_fn["data#1"].jsfunc(ctx._curr);
-	},
-	null, [], true, false, {type: Fleur.Node, occurence: "*"});
+  function(ctx) {
+    return Fleur.XPathFunctions_fn["data#1"].jsfunc(ctx._curr);
+  },
+  null, [], true, false, {type: Fleur.Node, occurence: "*"});
 Fleur.XPathFunctions_fn["data#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:data",
-	function(arg) {
-		return Fleur.Atomize(arg, true);
-	},
-	null, [{type: Fleur.Node, occurence: "*"}], true, false, {type: Fleur.Node, occurence: "*"});
+  function(arg) {
+    return Fleur.Atomize(arg, true);
+  },
+  null, [{type: Fleur.Node, occurence: "*"}], true, false, {type: Fleur.Node, occurence: "*"});
+Fleur.signatures.fn_dateTime_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_dateTime,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_date,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_time,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["dateTime#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:dateTime",
-	function(arg1, arg2) {
-		if (arg1 === null || arg2 === null) {
-			return null;
-		}
-		var dt = Fleur.toDate(arg1);
-		var tm = Fleur.toTime(arg2);
-		if (dt.tz === null) {
-			dt.tz = tm.tz;
-		} else if (dt.tz !== tm.tz && tm.tz !== null) {
-			var e = new Error();
-			e.name = "FORG0008";
-			return e;
-		}
-		dt.d.setHours(tm.d.getHours());
-		dt.d.setMinutes(tm.d.getMinutes());
-		dt.d.setSeconds(tm.d.getSeconds());
-		dt.d.setMilliseconds(tm.d.getMilliseconds());
-		return Fleur.dateToDateTime(dt);
-	},
-	null, [{type: Fleur.Type_date, occurence: "?"}, {type: Fleur.Type_time, occurence: "?"}], false, false, {type: Fleur.Type_dateTime, occurence: "?"});
+  function(arg1, arg2) {
+    if (arg1 === null || arg2 === null) {
+      return null;
+    }
+    var dt = Fleur.toDate(arg1);
+    var tm = Fleur.toTime(arg2);
+    if (dt.tz === null) {
+      dt.tz = tm.tz;
+    } else if (dt.tz !== tm.tz && tm.tz !== null) {
+      var e = new Error();
+      e.name = "FORG0008";
+      return e;
+    }
+    dt.d.setHours(tm.d.getHours());
+    dt.d.setMinutes(tm.d.getMinutes());
+    dt.d.setSeconds(tm.d.getSeconds());
+    dt.d.setMilliseconds(tm.d.getMilliseconds());
+    return Fleur.dateToDateTime(dt);
+  },
+  null, [{type: Fleur.Type_date, occurence: "?"}, {type: Fleur.Type_time, occurence: "?"}], false, false, {type: Fleur.Type_dateTime, occurence: "?"});
+Fleur.signatures.fn_day$_from$_date_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_date,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["day-from-date#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:day-from-date",
-	function(arg) {
-		return arg !== null ? parseInt(arg.match(/^\d{4}-\d{2}-(\d{2})(?:Z|[+\-]\d{2}:\d{2})?$/)[1], 10) : null;
-	},
-	null, [{type: Fleur.Type_date, occurence: "?"}], true, false, {type: Fleur.Type_integer, occurence: "?"});
+  function(arg) {
+    return arg !== null ? parseInt(arg.match(/^\d{4}-\d{2}-(\d{2})(?:Z|[+\-]\d{2}:\d{2})?$/)[1], 10) : null;
+  },
+  null, [{type: Fleur.Type_date, occurence: "?"}], true, false, {type: Fleur.Type_integer, occurence: "?"});
+Fleur.signatures.fn_day$_from$_dateTime_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_dateTime,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["day-from-dateTime#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:day-from-dateTime",
-	function(arg) {
-		return arg !== null ? parseInt(arg.match(/^\d{4}-\d{2}-(\d{2})T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})?$/)[1], 10) : null;
-	},
-	null, [{type: Fleur.Type_dateTime, occurence: "?"}], true, false, {type: Fleur.Type_integer, occurence: "?"});
+  function(arg) {
+    return arg !== null ? parseInt(arg.match(/^\d{4}-\d{2}-(\d{2})T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})?$/)[1], 10) : null;
+  },
+  null, [{type: Fleur.Type_dateTime, occurence: "?"}], true, false, {type: Fleur.Type_integer, occurence: "?"});
+ Fleur.signatures.fn_days$_from$_duration_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_duration,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["days-from-duration#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:days-from-duration",
-	function(arg) {
-		var a = Fleur.Atomize(arg);
-		var d;
-		if (a === Fleur.EmptySequence) {
-			return null;
-		}
-		if (a.schemaTypeInfo === Fleur.Type_yearMonthDuration) {
-			return 0;
-		}
-		if (a.schemaTypeInfo === Fleur.Type_dayTimeDuration) {
-			d = Fleur.toJSONDayTimeDuration(a.data);
-			return d.sign * d.day;
-		}
-		if (a.schemaTypeInfo === Fleur.Type_duration) {
-			d = Fleur.toJSONDuration(a.data);
-			return d.sign * d.day;
-		}
-		var e = new Error("");
-		e.name = "XPTY0004";
-		return e;
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_integer, occurence: "?"});
+  function(arg) {
+    var a = Fleur.Atomize(arg);
+    var d;
+    if (a === Fleur.EmptySequence) {
+      return null;
+    }
+    if (a.schemaTypeInfo === Fleur.Type_yearMonthDuration) {
+      return 0;
+    }
+    if (a.schemaTypeInfo === Fleur.Type_dayTimeDuration) {
+      d = Fleur.toJSONDayTimeDuration(a.data);
+      return d.sign * d.day;
+    }
+    if (a.schemaTypeInfo === Fleur.Type_duration) {
+      d = Fleur.toJSONDuration(a.data);
+      return d.sign * d.day;
+    }
+    var e = new Error("");
+    e.name = "XPTY0004";
+    return e;
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_integer, occurence: "?"});
+Fleur.signatures.fn_deep$_equal_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: null,
+  params_type: [null]
+};
 Fleur.XPathFunctions_fn["deep-equal#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:deep-equal",
-	function(parameter1, parameter2) {
-		return Fleur.XPathFunctions_fn["deep-equal#3"].jsfunc(parameter1, parameter2, "http://www.w3.org/2005/xpath-functions/collation/codepoint");
-	},
-	null, [{type: Fleur.Node, occurence: "*"}, {type: Fleur.Node, occurence: "*"}], false, false, {type: Fleur.Type_boolean});
+  function(parameter1, parameter2) {
+    return Fleur.XPathFunctions_fn["deep-equal#3"].jsfunc(parameter1, parameter2, "http://www.w3.org/2005/xpath-functions/collation/codepoint");
+  },
+  null, [{type: Fleur.Node, occurence: "*"}, {type: Fleur.Node, occurence: "*"}], false, false, {type: Fleur.Type_boolean});
 Fleur.XPathFunctions_fn["deep-equal#3"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:deep-equal",
-	function(parameter1, parameter2, collation) {
-		var e;
-		if (parameter1.nodeType === Fleur.Node.FUNCTION_NODE || parameter2.nodeType === Fleur.Node.FUNCTION_NODE) {
-			e = new Error("");
-			e.name = "FOTY0015";
-			return e;
-		}
-		var c = Fleur.getCollation(collation);
-		if (!c) {
-			e = new Error("");
-			e.name = "FOCH0002";
-			return e;
-		}
-		if (parameter1.nodeType !== parameter2.nodeType) {
-			return false;
-		}
-		switch (parameter1.nodeType) {
-			case Fleur.Node.ELEMENT_NODE:
-				if (parameter1.localName !== parameter2.localName || parameter1.namespaceURI !== parameter2.namespaceURI) {
-					return false;
-				}
-				if (parameter1.attributes.some(function(attr) {
-					if ((attr.localName === "xmlns" && attr.namespaceURI === "http://www.w3.org/XML/1998/namespace") || attr.namespaceURI === "http://www.w3.org/2000/xmlns/") {
-						return false;
-					}
-					var attr2value = parameter2.getAttributeNS(attr.namespaceURI, attr.localName);
-					return !c.equals(attr.textContent, attr2value);
-				})) {
-					return false;
-				}
-				var r1 = parameter1.attributes.reduce(function(acc, attr) {
-					return (attr.localName === "xmlns" && attr.namespaceURI === "http://www.w3.org/XML/1998/namespace") || attr.namespaceURI === "http://www.w3.org/2000/xmlns/" ? acc : acc + 1;
-				}, 0);
-				var r2 = parameter2.attributes.reduce(function(acc, attr) {
-					return (attr.localName === "xmlns" && attr.namespaceURI === "http://www.w3.org/XML/1998/namespace") || attr.namespaceURI === "http://www.w3.org/2000/xmlns/" ? acc : acc + 1;
-				}, 0);
-				if (r1 !== r2) {
-					return false;
-				}
-				break;
-			case Fleur.Node.ATTRIBUTE_NODE:
-				return parameter1.localName === parameter2.localName && parameter1.namespaceURI === parameter2.namespaceURI && c.equals(parameter1.textContent, parameter2.textContent);
-			case Fleur.Node.PROCESSING_INSTRUCTION_NODE:
-				return parameter1.nodeName === parameter2.nodeName && c.equals(parameter1.data, parameter2.data);
-			case Fleur.Node.TEXT_NODE:
-				if ((parameter1.schemaTypeInfo === Fleur.Type_string || parameter1.schemaTypeInfo === Fleur.Type_untypedAtomic || parameter1.schemaTypeInfo === Fleur.Type_anyURI) &&
-					(parameter2.schemaTypeInfo === Fleur.Type_string || parameter2.schemaTypeInfo === Fleur.Type_untypedAtomic || parameter2.schemaTypeInfo === Fleur.Type_anyURI)) {
-					return c.equals(parameter1.data, parameter2.data);
-				}
-				if (Fleur.numericTypes.indexOf(parameter1.schemaTypeInfo) !== -1 &&
-					Fleur.numericTypes.indexOf(parameter2.schemaTypeInfo) !== -1) {
-					return (parameter1.data === "INF" && parameter2.data === "INF") ||
-						(parameter1.data === "-INF" && parameter2.data === "-INF") ||
-						(parameter1.data === "NaN" && parameter2.data === "NaN") ||
-						parseFloat(parameter1.data) === parseFloat(parameter2.data);
-				}
-				return parameter1.schemaTypeInfo === parameter2.schemaTypeInfo && parameter1.data === parameter2.data;
-		}
-		if (parameter1.childNodes) {
-			if (parameter2.childNodes && parameter1.childNodes.length === parameter2.childNodes.length) {
-				return parameter1.childNodes.every(function(child, i) {
-					return Fleur.XPathFunctions_fn["deep-equal#3"].jsfunc(child, parameter2.childNodes[i], collation);
-				});
-			}
-			return false;
-		}
-		return true;
-	},
-	null, [{type: Fleur.Node, occurence: "*"}, {type: Fleur.Node, occurence: "*"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_boolean});
+  function(parameter1, parameter2, collation) {
+    var e;
+    if (parameter1.nodeType === Fleur.Node.FUNCTION_NODE || parameter2.nodeType === Fleur.Node.FUNCTION_NODE) {
+      e = new Error("");
+      e.name = "FOTY0015";
+      return e;
+    }
+    var c = Fleur.getCollation(collation);
+    if (!c) {
+      e = new Error("");
+      e.name = "FOCH0002";
+      return e;
+    }
+    if (parameter1.nodeType !== parameter2.nodeType) {
+      return false;
+    }
+    switch (parameter1.nodeType) {
+      case Fleur.Node.ELEMENT_NODE:
+        if (parameter1.localName !== parameter2.localName || parameter1.namespaceURI !== parameter2.namespaceURI) {
+          return false;
+        }
+        if (parameter1.attributes.some(function(attr) {
+          if ((attr.localName === "xmlns" && attr.namespaceURI === "http://www.w3.org/XML/1998/namespace") || attr.namespaceURI === "http://www.w3.org/2000/xmlns/") {
+            return false;
+          }
+          var attr2value = parameter2.getAttributeNS(attr.namespaceURI, attr.localName);
+          return !c.equals(attr.textContent, attr2value);
+        })) {
+          return false;
+        }
+        var r1 = parameter1.attributes.reduce(function(acc, attr) {
+          return (attr.localName === "xmlns" && attr.namespaceURI === "http://www.w3.org/XML/1998/namespace") || attr.namespaceURI === "http://www.w3.org/2000/xmlns/" ? acc : acc + 1;
+        }, 0);
+        var r2 = parameter2.attributes.reduce(function(acc, attr) {
+          return (attr.localName === "xmlns" && attr.namespaceURI === "http://www.w3.org/XML/1998/namespace") || attr.namespaceURI === "http://www.w3.org/2000/xmlns/" ? acc : acc + 1;
+        }, 0);
+        if (r1 !== r2) {
+          return false;
+        }
+        break;
+      case Fleur.Node.ATTRIBUTE_NODE:
+        return parameter1.localName === parameter2.localName && parameter1.namespaceURI === parameter2.namespaceURI && c.equals(parameter1.textContent, parameter2.textContent);
+      case Fleur.Node.PROCESSING_INSTRUCTION_NODE:
+        return parameter1.nodeName === parameter2.nodeName && c.equals(parameter1.data, parameter2.data);
+      case Fleur.Node.TEXT_NODE:
+        if ((parameter1.schemaTypeInfo === Fleur.Type_string || parameter1.schemaTypeInfo === Fleur.Type_untypedAtomic || parameter1.schemaTypeInfo === Fleur.Type_anyURI) &&
+          (parameter2.schemaTypeInfo === Fleur.Type_string || parameter2.schemaTypeInfo === Fleur.Type_untypedAtomic || parameter2.schemaTypeInfo === Fleur.Type_anyURI)) {
+          return c.equals(parameter1.data, parameter2.data);
+        }
+        if (Fleur.numericTypes.indexOf(parameter1.schemaTypeInfo) !== -1 &&
+          Fleur.numericTypes.indexOf(parameter2.schemaTypeInfo) !== -1) {
+          return (parameter1.data === "INF" && parameter2.data === "INF") ||
+            (parameter1.data === "-INF" && parameter2.data === "-INF") ||
+            (parameter1.data === "NaN" && parameter2.data === "NaN") ||
+            parseFloat(parameter1.data) === parseFloat(parameter2.data);
+        }
+        return parameter1.schemaTypeInfo === parameter2.schemaTypeInfo && parameter1.data === parameter2.data;
+    }
+    if (parameter1.childNodes) {
+      if (parameter2.childNodes && parameter1.childNodes.length === parameter2.childNodes.length) {
+        return parameter1.childNodes.every(function(child, i) {
+          return Fleur.XPathFunctions_fn["deep-equal#3"].jsfunc(child, parameter2.childNodes[i], collation);
+        });
+      }
+      return false;
+    }
+    return true;
+  },
+  null, [{type: Fleur.Node, occurence: "*"}, {type: Fleur.Node, occurence: "*"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_boolean});
+Fleur.signatures.fn_default$_collation_0 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "1"
+  },
+  params_type: []
+};
 Fleur.XPathFunctions_fn["default-collation#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:default-collation",
-	function() {
-		return "http://www.w3.org/2005/xpath-functions/collation/codepoint";
-	},
-	null, [], false, false, {type: Fleur.Type_string});
+  function() {
+    return "http://www.w3.org/2005/xpath-functions/collation/codepoint";
+  },
+  null, [], false, false, {type: Fleur.Type_string});
+ Fleur.signatures.fn_distinct$_values_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: null,
+  params_type: [null]
+};
 Fleur.XPathFunctions_fn["distinct-values#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:distinct-values",
-	function(arg) {
-		return Fleur.XPathFunctions_fn["distinct-values#2"].jsfunc(arg, "http://www.w3.org/2005/xpath-functions/collation/codepoint");
-	},
-	null, [{type: Fleur.Node, occurence: "*"}], false, false, {type: Fleur.Node, occurence: "*"});
+  function(arg) {
+    return Fleur.XPathFunctions_fn["distinct-values#2"].jsfunc(arg, "http://www.w3.org/2005/xpath-functions/collation/codepoint");
+  },
+  null, [{type: Fleur.Node, occurence: "*"}], false, false, {type: Fleur.Node, occurence: "*"});
 Fleur.XPathFunctions_fn["distinct-values#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:distinct-values",
-	function(arg, collation) {
-		var c = Fleur.getCollation(collation);
-		if (!c) {
-			var e = new Error("");
-			e.name = "FOCH0002";
-			return e;
-		}
-		if (arg === Fleur.EmptySequence || arg.nodeType !== Fleur.Node.SEQUENCE_NODE) {
-			return arg;
-		}
-		var result = new Fleur.Sequence();
-		arg.childNodes.forEach(function(d) {
-			var a = Fleur.Atomize(d);
-			var opa = Fleur.toJSValue(a, true, true, true, true, false, false, true);
-			if (!result.childNodes.some(function(r) {
-					var opr = Fleur.toJSValue(r, true, true, true, true, false, false, true);
-					return Fleur.eqOp(opa, opr, c);
-				})) {
-				result.appendChild(a);
-			}
-		});
-		if (result.childNodes.length === 1) {
-			result = result.childNodes[0];
-		}
-		return result;
-	},
-	null, [{type: Fleur.Node, occurence: "*"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Node, occurence: "*"});
+  function(arg, collation) {
+    var c = Fleur.getCollation(collation);
+    if (!c) {
+      var e = new Error("");
+      e.name = "FOCH0002";
+      return e;
+    }
+    if (arg === Fleur.EmptySequence || arg.nodeType !== Fleur.Node.SEQUENCE_NODE) {
+      return arg;
+    }
+    var result = new Fleur.Sequence();
+    arg.childNodes.forEach(function(d) {
+      var a = Fleur.Atomize(d);
+      var opa = Fleur.toJSValue(a, true, true, true, true, false, false, true);
+      if (!result.childNodes.some(function(r) {
+          var opr = Fleur.toJSValue(r, true, true, true, true, false, false, true);
+          return Fleur.eqOp(opa, opr, c);
+        })) {
+        result.appendChild(a);
+      }
+    });
+    if (result.childNodes.length === 1) {
+      result = result.childNodes[0];
+    }
+    return result;
+  },
+  null, [{type: Fleur.Node, occurence: "*"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Node, occurence: "*"});
 Fleur.extension2contentType = {
-	".css":   "text/css",
-	".csv":   "text/csv",
-	".docx":  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-	".gif":   "image/gif",
-	".htm":   "text/html",
-	".html":  "text/html",
-	".ico":   "image/x-icon",
-	".jpeg":  "image/jpeg",
-	".jpg":   "image/jpeg",
-	".js":    "application/javascript",
-	".json":  "application/json",
-	".ofx":   "application/x-ofx",
-	".png":   "image/png",
-	".svg":   "image/svg+xml",
-	".txt":   "text/plain",
-	".xhtml": "application/xhtml+xml",
-	".xlsx":  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-	".xml":   "application/xml;charset=utf-8",
-	".xsl":   "text/xsl",
-	".zip":   "application/zip"
+  ".css":   "text/css",
+  ".csv":   "text/csv",
+  ".docx":  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ".gif":   "image/gif",
+  ".htm":   "text/html",
+  ".html":  "text/html",
+  ".ico":   "image/x-icon",
+  ".jpeg":  "image/jpeg",
+  ".jpg":   "image/jpeg",
+  ".js":    "application/javascript",
+  ".json":  "application/json",
+  ".ofx":   "application/x-ofx",
+  ".png":   "image/png",
+  ".svg":   "image/svg+xml",
+  ".txt":   "text/plain",
+  ".xhtml": "application/xhtml+xml",
+  ".xlsx":  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  ".xml":   "application/xml;charset=utf-8",
+  ".xsl":   "text/xsl",
+  ".zip":   "application/zip"
 };
 Fleur.extension2encoding = {
-	".css":   "utf8",
-	".csv":   "utf8",
-	".docx":  "binary",
-	".gif":   "binary",
-	".htm":   "utf8",
-	".html":  "utf8",
-	".ico":   "binary",
-	".jpeg":  "binary",
-	".jpg":   "binary",
-	".js":    "utf8",
-	".json":  "utf8",
-	".ofx":   "utf8",
-	".png":   "binary",
-	".svg":   "utf8",
-	".txt":   "utf8",
-	".xhtml": "utf8",
-	".xlsx":  "binary",
-	".xml":   "utf8",
-	".xsl":   "utf8",
-	".zip":   "binary"
+  ".css":   "utf8",
+  ".csv":   "utf8",
+  ".docx":  "binary",
+  ".gif":   "binary",
+  ".htm":   "utf8",
+  ".html":  "utf8",
+  ".ico":   "binary",
+  ".jpeg":  "binary",
+  ".jpg":   "binary",
+  ".js":    "utf8",
+  ".json":  "utf8",
+  ".ofx":   "utf8",
+  ".png":   "binary",
+  ".svg":   "utf8",
+  ".txt":   "utf8",
+  ".xhtml": "utf8",
+  ".xlsx":  "binary",
+  ".xml":   "utf8",
+  ".xsl":   "utf8",
+  ".zip":   "binary"
 };
 Fleur.encoding2encoding = {
-	"us-ascii":   "latin1",
-	"iso-8859-1": "latin1",
-	"utf-8":      "utf8",
-	"utf-16":     "utf16le"   
+  "us-ascii":   "latin1",
+  "iso-8859-1": "latin1",
+  "utf-8":      "utf8",
+  "utf-16":     "utf16le"   
 };
 Fleur.signatures.fn_doc_1 = {
   need_ctx: false,
   is_async: true,
-  return_type: {type: Fleur.Node},
+  return_type: null,
   params_type: [
-    {type: Fleur.Type_string}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    }
   ]
 };
 Fleur.signatures.fn_doc_2 = {
   need_ctx: false,
   is_async: true,
-  return_type: {type: Fleur.Node},
+  return_type: null,
   params_type: [
-    {type: Fleur.Type_string},
-    {type: Fleur.Node, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    },
+    null
   ]
 };
 Fleur.signatures.fn_doc_3 = {
   need_ctx: false,
   is_async: true,
-  return_type: {type: Fleur.Node},
+  return_type: null,
   params_type: [
-    {type: Fleur.Type_string},
-    {type: Fleur.Node, occurence: "?"},
-    {type: Fleur.Node, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    },
+    null,
+    null
   ]
 };
 Fleur.Context.prototype.fn_doc_1_async = async function() {
@@ -7577,7 +7906,7 @@ Fleur.Context.prototype.fn_doc_3_async = async function() {
   let docname = this.itemstack.pop().data;
   if (serialization.isNotEmpty()) {
     const a2 = Fleur.Atomize(serialization);
-    const	op2 = Fleur.toJSObject(a2);
+    const  op2 = Fleur.toJSObject(a2);
     if (op2[0] < 0) {
       return a2;
     }
@@ -7611,8 +7940,8 @@ Fleur.Context.prototype.fn_doc_3_async = async function() {
     } else {
       const response = await fetch(docname);
       this.item = parser.parseFromString(await response.text(), contentType || response.headers.get("Content-Type"));
-			this.position = 1;
-			this.last = 1;
+      this.position = 1;
+      this.last = 1;
       return this;
     }
   } else if (fileread) {
@@ -7664,171 +7993,183 @@ Fleur.Context.prototype.fn_doc_3_async = async function() {
   }
 };
 Fleur.XPathFunctions_fn["doc#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:doc",
-	function(docname, ctx, callback) {
-		return Fleur.XPathFunctions_fn["doc#3"].jsfunc(docname, null, null, ctx, callback);
-	},
-	null, [{type: Fleur.Type_string}], true, true, {type: Fleur.Node});
+  function(docname, ctx, callback) {
+    return Fleur.XPathFunctions_fn["doc#3"].jsfunc(docname, null, null, ctx, callback);
+  },
+  null, [{type: Fleur.Type_string}], true, true, {type: Fleur.Node});
 Fleur.XPathFunctions_fn["doc#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:doc",
-	function(docname, serialization, ctx, callback) {
-		return Fleur.XPathFunctions_fn["doc#3"].jsfunc(docname, serialization, null, ctx, callback);
-	},
-	null, [{type: Fleur.Type_string}, {type: Fleur.Node, occurence: "?"}], true, true, {type: Fleur.Node});
+  function(docname, serialization, ctx, callback) {
+    return Fleur.XPathFunctions_fn["doc#3"].jsfunc(docname, serialization, null, ctx, callback);
+  },
+  null, [{type: Fleur.Type_string}, {type: Fleur.Node, occurence: "?"}], true, true, {type: Fleur.Node});
 Fleur.XPathFunctions_fn["doc#3"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:doc",
-	function(docname, serialization, data, ctx, callback) {
-		var contentType;
-		var encoding;
-		if (serialization) {
-			var a2 = Fleur.Atomize(serialization);
-			var	op2 = Fleur.toJSObject(a2);
-			if (op2[0] < 0) {
-				callback(a2);
-				return;
-			}
-			serialization = op2[1];
-			contentType = Fleur.toContentType(serialization);
-			if (serialization["encoding"]) {
-				encoding = Fleur.encoding2encoding[serialization["encoding"].toLowerCase()];
-			}
-		}
-		var httpget = docname.startsWith("http://") || Fleur.inBrowser;
-		var cmdexec = docname.startsWith("cmd://");
-		var ps1exec = docname.startsWith("ps1://");
-		var fileread = (docname.startsWith("file://") || !httpget) && !cmdexec && !ps1exec;
-		var parser = new Fleur.DOMParser();
-		if (httpget) {
-			if (!Fleur.inBrowser) {
-				var options = global.url.parse(docname);
-				options.method = (serialization["http-verb"] || "GET").toUpperCase();
-				options.headers = serialization["http-headers"] || {};
-				if (serialization["http-cookie"]) {
-					options.headers.Cookie = serialization["http-cookie"];
-				}
-				var postdata = null;
-				if (data) {
-					var ser = new Fleur.Serializer();
-					postdata = ser.serializeToString(data, contentType);
-					options.headers["Content-Type"] = contentType;
-					options.headers["Content-Length"] = postdata.length;
-				}
-				var resdata = "";
-				var hreq = global.http.request(options, function(res) {
-					res.setEncoding("utf8");
-					res.on("data", function(chunk) {
-						resdata += chunk;
-					});
-					res.on("end", function() {
-						callback(parser.parseFromString(resdata, res.headers["Content-Type"] || contentType));
-					});
-				});
-				if (serialization["timeout"]) {
-					hreq.setTimeout(parseInt(serialization["timeout"], 10), function() {
-						callback(null);
-					});
-				}
-				hreq.on("error", function(e) {
-					callback(e);
-				});
-				if (postdata) {
-					hreq.write(postdata);
-				}
-				hreq.end();
-			} else {
-				var getp = new Promise(function(resolve, reject) {
-					var req = new XMLHttpRequest();
-					req.open(serialization && serialization["http-verb"] ? serialization["http-verb"].toUpperCase() : "GET", docname, true);
-					req.onload = function() {
-						if (req.status === 200) {
-							resolve({text: req.responseText, contenttype: serialization ? contentType : req.getResponseHeader("Content-Type")});
-						} else {
-							reject(Fleur.error(ctx, "FODC0002"));
-				      	}
-					};
-					req.send(null);
-				});
-				getp.then(
-					function(o) {
-						callback(parser.parseFromString(o.text, o.contenttype));
-					},
-					function(a) {
-						callback(a);
-					}
-				);
-			}
-		} else if (fileread) {
-			if (docname.startsWith("file://")) {
-				docname = docname.substr(7);
-			}
-			var extension = global.path.extname(docname).toLowerCase();
-			if (!contentType) {
-				contentType = Fleur.extension2contentType[extension] || "application/xml";
-			}
-			if (!encoding) {
-				encoding = "utf8";
-			}
-			global.fs.readFile(docname, encoding, function(err, file) {
-				if (err) {
-					callback(Fleur.error(ctx, "FODC0002"));
-				} else {
-					callback(parser.parseFromString(file.startsWith('\uFEFF') ? file.substr(1) : file, contentType));
-				}
-			});
-		} else if (cmdexec || ps1exec) {
-			docname = decodeURIComponent(docname.substr(6));
-			if (!contentType) {
-				contentType = "application/xml";
-			}
-			var dropone = false;
-			if (global.os.platform() === "win32") {
-				if (cmdexec) {
-					docname = "@chcp 65001 | " + docname;
-				} else {
-					docname = "%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass \"& {chcp 65001 ; $ProgressPreference='SilentlyContinue' ; " + docname + "}\"";
-					dropone = true;
-				}
-			}
-			global.child_process.exec(docname, {windowsHide: true, maxBuffer: 1024*1024*1024}, function(err, stdout, stderr) {
-				if (err) {
-					err.name = "FOPR0001";
-					callback(err);
-				} else if (stderr) {
-					var e = new Error(stderr);
-					e.name = "FOPR0001";
-					callback(e);
-				} else {
-					if (dropone) {
-						stdout = stdout.substr(stdout.indexOf("\r\n") + 2);
-					}
-					callback(parser.parseFromString(stdout, contentType));
-				}
-			});
-		}
-	},
-	null, [{type: Fleur.Type_string}, {type: Fleur.Node, occurence: "?"}, {type: Fleur.Node, occurence: "?"}], true, true, {type: Fleur.Node});
+  function(docname, serialization, data, ctx, callback) {
+    var contentType;
+    var encoding;
+    if (serialization) {
+      var a2 = Fleur.Atomize(serialization);
+      var  op2 = Fleur.toJSObject(a2);
+      if (op2[0] < 0) {
+        callback(a2);
+        return;
+      }
+      serialization = op2[1];
+      contentType = Fleur.toContentType(serialization);
+      if (serialization["encoding"]) {
+        encoding = Fleur.encoding2encoding[serialization["encoding"].toLowerCase()];
+      }
+    }
+    var httpget = docname.startsWith("http://") || Fleur.inBrowser;
+    var cmdexec = docname.startsWith("cmd://");
+    var ps1exec = docname.startsWith("ps1://");
+    var fileread = (docname.startsWith("file://") || !httpget) && !cmdexec && !ps1exec;
+    var parser = new Fleur.DOMParser();
+    if (httpget) {
+      if (!Fleur.inBrowser) {
+        var options = global.url.parse(docname);
+        options.method = (serialization["http-verb"] || "GET").toUpperCase();
+        options.headers = serialization["http-headers"] || {};
+        if (serialization["http-cookie"]) {
+          options.headers.Cookie = serialization["http-cookie"];
+        }
+        var postdata = null;
+        if (data) {
+          var ser = new Fleur.Serializer();
+          postdata = ser.serializeToString(data, contentType);
+          options.headers["Content-Type"] = contentType;
+          options.headers["Content-Length"] = postdata.length;
+        }
+        var resdata = "";
+        var hreq = global.http.request(options, function(res) {
+          res.setEncoding("utf8");
+          res.on("data", function(chunk) {
+            resdata += chunk;
+          });
+          res.on("end", function() {
+            callback(parser.parseFromString(resdata, res.headers["Content-Type"] || contentType));
+          });
+        });
+        if (serialization["timeout"]) {
+          hreq.setTimeout(parseInt(serialization["timeout"], 10), function() {
+            callback(null);
+          });
+        }
+        hreq.on("error", function(e) {
+          callback(e);
+        });
+        if (postdata) {
+          hreq.write(postdata);
+        }
+        hreq.end();
+      } else {
+        var getp = new Promise(function(resolve, reject) {
+          var req = new XMLHttpRequest();
+          req.open(serialization && serialization["http-verb"] ? serialization["http-verb"].toUpperCase() : "GET", docname, true);
+          req.onload = function() {
+            if (req.status === 200) {
+              resolve({text: req.responseText, contenttype: serialization ? contentType : req.getResponseHeader("Content-Type")});
+            } else {
+              reject(Fleur.error(ctx, "FODC0002"));
+                }
+          };
+          req.send(null);
+        });
+        getp.then(
+          function(o) {
+            callback(parser.parseFromString(o.text, o.contenttype));
+          },
+          function(a) {
+            callback(a);
+          }
+        );
+      }
+    } else if (fileread) {
+      if (docname.startsWith("file://")) {
+        docname = docname.substr(7);
+      }
+      var extension = global.path.extname(docname).toLowerCase();
+      if (!contentType) {
+        contentType = Fleur.extension2contentType[extension] || "application/xml";
+      }
+      if (!encoding) {
+        encoding = "utf8";
+      }
+      global.fs.readFile(docname, encoding, function(err, file) {
+        if (err) {
+          callback(Fleur.error(ctx, "FODC0002"));
+        } else {
+          callback(parser.parseFromString(file.startsWith('\uFEFF') ? file.substr(1) : file, contentType));
+        }
+      });
+    } else if (cmdexec || ps1exec) {
+      docname = decodeURIComponent(docname.substr(6));
+      if (!contentType) {
+        contentType = "application/xml";
+      }
+      var dropone = false;
+      if (global.os.platform() === "win32") {
+        if (cmdexec) {
+          docname = "@chcp 65001 | " + docname;
+        } else {
+          docname = "%SystemRoot%\\system32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -NoLogo -NonInteractive -ExecutionPolicy Bypass \"& {chcp 65001 ; $ProgressPreference='SilentlyContinue' ; " + docname + "}\"";
+          dropone = true;
+        }
+      }
+      global.child_process.exec(docname, {windowsHide: true, maxBuffer: 1024*1024*1024}, function(err, stdout, stderr) {
+        if (err) {
+          err.name = "FOPR0001";
+          callback(err);
+        } else if (stderr) {
+          var e = new Error(stderr);
+          e.name = "FOPR0001";
+          callback(e);
+        } else {
+          if (dropone) {
+            stdout = stdout.substr(stdout.indexOf("\r\n") + 2);
+          }
+          callback(parser.parseFromString(stdout, contentType));
+        }
+      });
+    }
+  },
+  null, [{type: Fleur.Type_string}, {type: Fleur.Node, occurence: "?"}, {type: Fleur.Node, occurence: "?"}], true, true, {type: Fleur.Node});
+Fleur.signatures.fn_document$_uri_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_anyURI,
+    occurrence: "?"
+  },
+  params_type: [null]
+};
 Fleur.XPathFunctions_fn["document-uri#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:document-uri",
-	function(ctx) {
-		return Fleur.XPathFunctions_fn["document-uri#1"].jsfunc(ctx._curr);
-	},
-	null, [], true, false, {type: Fleur.Type_anyURI});
+  function(ctx) {
+    return Fleur.XPathFunctions_fn["document-uri#1"].jsfunc(ctx._curr);
+  },
+  null, [], true, false, {type: Fleur.Type_anyURI});
 Fleur.XPathFunctions_fn["document-uri#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:document-uri",
-	function(node) {
-		if (node === Fleur.EmptySequence) {
-			return null;
-		}
-		if ((node.nodeType === Fleur.Node.TEXT_NODE && node.schemaTypeInfo !== Fleur.Type_untypedAtomic) || node.nodeType === Fleur.Node.FUNCTION_NODE) {
-			var e = new Error("");
-			e.name = "XPTY0004";
-			return e;
-		}
-		return "";
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_anyURI});
+  function(node) {
+    if (node === Fleur.EmptySequence) {
+      return null;
+    }
+    if ((node.nodeType === Fleur.Node.TEXT_NODE && node.schemaTypeInfo !== Fleur.Type_untypedAtomic) || node.nodeType === Fleur.Node.FUNCTION_NODE) {
+      var e = new Error("");
+      e.name = "XPTY0004";
+      return e;
+    }
+    return "";
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_anyURI});
 Fleur.signatures.fn_empty_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_boolean},
-  params_type: [
-    {type: Fleur.Node, occurence: "*"}
-  ]
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_boolean,
+    occurrence: "1"
+  },
+  params_type: [null]
 };
 Fleur.Context.prototype.fn_empty_1 = function() {
   const isempty = this.item.isEmpty();
@@ -7842,211 +8183,310 @@ Fleur.XPathFunctions_fn["empty#1"] = new Fleur.Function("http://www.w3.org/2005/
     return arg === Fleur.EmptySequence;
   },
   null, [{type: Fleur.Node, occurence: "*"}], false, false, {type: Fleur.Type_boolean});
+Fleur.signatures.fn_encode$_for$_uri_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "1"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["encode-for-uri#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:encode-for-uri",
-	function(uripart) {
-		return uripart !== null ? encodeURIComponent(uripart).replace(/[!'()*]/g, function(c) {return '%' + c.charCodeAt(0).toString(16).toUpperCase();}) : "";
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_string});
+  function(uripart) {
+    return uripart !== null ? encodeURIComponent(uripart).replace(/[!'()*]/g, function(c) {return '%' + c.charCodeAt(0).toString(16).toUpperCase();}) : "";
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_string});
  Fleur.signatures.fn_ends$_with_2 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_boolean},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_boolean,
+    occurrence: "1"
+  },
   params_type: [
-    {type: Fleur.Type_string, occurence: "?"},
-    {type: Fleur.Type_string, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.fn_ends$_with_2 = function() {
   const arg2 = this.item;
   const arg1 = this.itemstack.pop();
   if (arg2.isNotEmpty()) {
-		if (arg1.isNotEmpty()) {
-    	this.item.data = String(arg1.data.endsWith(arg2.data));
-		} else {
-			this.item = new Fleur.Text();
-			this.item.data = String(arg2.data.length === 0);
-		}
+    if (arg1.isNotEmpty()) {
+      this.item.data = String(arg1.data.endsWith(arg2.data));
+    } else {
+      this.item = new Fleur.Text();
+      this.item.data = String(arg2.data.length === 0);
+    }
   } else {
-		this.item = new Fleur.Text();
-		this.item.data = "true";
-	}
-	this.item.schemaTypeInfo = Fleur.Type_boolean;
+    this.item = new Fleur.Text();
+    this.item.data = "true";
+  }
+  this.item.schemaTypeInfo = Fleur.Type_boolean;
   return this;
 };
 Fleur.XPathFunctions_fn["ends-with#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:ends-with",
-	function(a, b) {
-		return !b ? true : !a ? false : a.endsWith(b);
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_boolean});
+  function(a, b) {
+    return !b ? true : !a ? false : a.endsWith(b);
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_boolean});
 Fleur.XPathFunctions_fn["ends-with#3"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:ends-with",
-	function(a, b, collation) {
-		var c = Fleur.getCollation(collation);
-		if (!c) {
-			var e = new Error("");
-			e.name = "FOCH0002";
-			return e;
-		}
-		return !b ? true : !a ? false : c.endsWith(a, b);
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_boolean});
+  function(a, b, collation) {
+    var c = Fleur.getCollation(collation);
+    if (!c) {
+      var e = new Error("");
+      e.name = "FOCH0002";
+      return e;
+    }
+    return !b ? true : !a ? false : c.endsWith(a, b);
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_boolean});
+Fleur.signatures.fn_error_0 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: null,
+  params_type: []
+};
+Fleur.signatures.fn_error_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: null,
+  params_type: [null]
+};
+Fleur.signatures.fn_error_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: null,
+  params_type: [
+    null,
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
+  ]
+};
+Fleur.signatures.fn_error_3 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: null,
+  params_type: [
+    null,
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    },
+    null
+  ]
+};
 Fleur.XPathFunctions_fn["error#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:error",
-	function(ctx) {
-		return Fleur.XPathFunctions_fn["error#3"].jsfunc(null, null, null, ctx);
-	},
-	null, [], true, false, {type: Fleur.Node});
+  function(ctx) {
+    return Fleur.XPathFunctions_fn["error#3"].jsfunc(null, null, null, ctx);
+  },
+  null, [], true, false, {type: Fleur.Node});
 Fleur.XPathFunctions_fn["error#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:error",
-	function(code, ctx) {
-		return Fleur.XPathFunctions_fn["error#3"].jsfunc(code, null, null, ctx);
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], true, false, {type: Fleur.Node});
+  function(code, ctx) {
+    return Fleur.XPathFunctions_fn["error#3"].jsfunc(code, null, null, ctx);
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], true, false, {type: Fleur.Node});
 Fleur.XPathFunctions_fn["error#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:error",
-	function(code, description, ctx) {
-		return Fleur.XPathFunctions_fn["error#3"].jsfunc(code, description, null, ctx);
-	},
-	null, [{type: Fleur.Node, occurence: "?"}, {type: Fleur.Type_string}], true, false, {type: Fleur.Node});
+  function(code, description, ctx) {
+    return Fleur.XPathFunctions_fn["error#3"].jsfunc(code, description, null, ctx);
+  },
+  null, [{type: Fleur.Node, occurence: "?"}, {type: Fleur.Type_string}], true, false, {type: Fleur.Node});
 Fleur.XPathFunctions_fn["error#3"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:error",
-	function(code, description, errorObject, ctx) {
-		var a = new Fleur.Text();
-		a.schemaTypeInfo = Fleur.Type_error;
-		if (!code || code === Fleur.EmptySequence) {
-			a._setNodeNameLocalNamePrefix("http://www.w3.org/2005/xqt-errors", "err:FOER0000");
-		} else if (code.nodeType !== Fleur.Node.TEXT_NODE || (code.schemaTypeInfo !== Fleur.Type_QName && code.schemaTypeInfo !== Fleur.Type_error)) {
-			a._setNodeNameLocalNamePrefix("http://www.w3.org/2005/xqt-errors", "err:XPTY0004");
-		} else if (code.schemaTypeInfo === Fleur.Type_error) {
-			return code;
-		} else {
-			a._setNodeNameLocalNamePrefix(code.namespaceURI, code.nodeName);
-		}
-		if (description) {
-			a.data = description;
-		}
-		return a;
-	},
-	null, [{type: Fleur.Node, occurence: "?"}, {type: Fleur.Type_string}, {type: Fleur.Node, occurence: "*"}], true, false, {type: Fleur.Node});
+  function(code, description, errorObject, ctx) {
+    var a = new Fleur.Text();
+    a.schemaTypeInfo = Fleur.Type_error;
+    if (!code || code === Fleur.EmptySequence) {
+      a._setNodeNameLocalNamePrefix("http://www.w3.org/2005/xqt-errors", "err:FOER0000");
+    } else if (code.nodeType !== Fleur.Node.TEXT_NODE || (code.schemaTypeInfo !== Fleur.Type_QName && code.schemaTypeInfo !== Fleur.Type_error)) {
+      a._setNodeNameLocalNamePrefix("http://www.w3.org/2005/xqt-errors", "err:XPTY0004");
+    } else if (code.schemaTypeInfo === Fleur.Type_error) {
+      return code;
+    } else {
+      a._setNodeNameLocalNamePrefix(code.namespaceURI, code.nodeName);
+    }
+    if (description) {
+      a.data = description;
+    }
+    return a;
+  },
+  null, [{type: Fleur.Node, occurence: "?"}, {type: Fleur.Type_string}, {type: Fleur.Node, occurence: "*"}], true, false, {type: Fleur.Node});
 Fleur.signatures.fn_escape$_html$_uri_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_string},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "1"
+  },
   params_type: [
-    {type: Fleur.Type_string, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.fn_escape$_html$_uri_1 = function() {
   if (this.item.isNotEmpty()) {
     this.item.data = this.item.data.replace(/[^ -~]/g, function(c) {return encodeURIComponent(c);});
   } else {
-		this.item = new Fleur.Text();
-		this.item.data = "";
-	}
-	this.item.schemaTypeInfo = Fleur.Type_string;
+    this.item = new Fleur.Text();
+    this.item.data = "";
+  }
+  this.item.schemaTypeInfo = Fleur.Type_string;
   return this;
 };
 Fleur.XPathFunctions_fn["escape-html-uri#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:escape-html-uri",
-	function(s) {
-		return !s ? "" : s.replace(/[^ -~]/g, function(c) {return encodeURIComponent(c);});
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_string});
+  function(s) {
+    return !s ? "" : s.replace(/[^ -~]/g, function(c) {return encodeURIComponent(c);});
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_string});
 Fleur.signatures.fn_evaluate_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Node},
+  return_type: null,
   params_type: [
-    {type: Fleur.Type_string}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.fn_evaluate_1 = function() {
   if (this.item.isNotEmpty()) {
-		const jsret = Fleur.XPathEvaluator._xp2js(this.item.data, "", "");
-		let arr;
-		eval("arr = " + jsret + ";");
-		try {
-			const jsresult = (new Fleur.Transpiler("ctx", "  ")).funcdef(arr);
-			try {
-				this.item = (eval("(" + jsresult + ")(new Fleur.Context())")).item;
-			} catch(e) {}
-		} catch(e) {}
+    const jsret = Fleur.XPathEvaluator._xp2js(this.item.data, "", "");
+    let arr;
+    eval("arr = " + jsret + ";");
+    try {
+      const jsresult = (new Fleur.Transpiler("ctx", "  ")).funcdef(arr);
+      try {
+        this.item = (eval("(" + jsresult + ")(new Fleur.Context())")).item;
+      } catch(e) {}
+    } catch(e) {}
   }
   return this;
 };
 Fleur.XPathFunctions_fn["evaluate#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:evaluate",
-	function(arg) {
-		return arg !== Fleur.EmptySequence;
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Node, occurence: "*"});
+  function(arg) {
+    return arg !== Fleur.EmptySequence;
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Node, occurence: "*"});
 Fleur.signatures.fn_exactly$_one_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Node},
+  return_type: null,
   params_type: [
-    {type: Fleur.Node, occurence: "*"}
+    {
+      occurrence: "*"
+    }
   ]
 };
 Fleur.Context.prototype.fn_exactly$_one_1 = function() {
-	if (this.item.nodeType === Fleur.Node.SEQUENCE_NODE) {
-	}
-	return this;
+  if (this.item.nodeType === Fleur.Node.SEQUENCE_NODE) {
+  }
+  return this;
 };
 Fleur.XPathFunctions_fn["exactly-one#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:exactly-one",
-	function(arg, ctx) {
-		if (arg.nodeType === Fleur.Node.SEQUENCE_NODE) {
-			var err = Fleur.error(ctx, "FORG0005");
-			var result = err;
-			arg.childNodes.forEach(function(c) {
-				if (c.schemaTypeInfo === Fleur.Type_error && result === err) {
-					result = c;
-				}
-			});
-			return result;
-		} else {
-			return arg;
-		}
-	},
-	null, [{type: Fleur.Node, occurence: "*"}], true, false, {type: Fleur.Node});
+  function(arg, ctx) {
+    if (arg.nodeType === Fleur.Node.SEQUENCE_NODE) {
+      var err = Fleur.error(ctx, "FORG0005");
+      var result = err;
+      arg.childNodes.forEach(function(c) {
+        if (c.schemaTypeInfo === Fleur.Type_error && result === err) {
+          result = c;
+        }
+      });
+      return result;
+    } else {
+      return arg;
+    }
+  },
+  null, [{type: Fleur.Node, occurence: "*"}], true, false, {type: Fleur.Node});
 Fleur.signatures.fn_exists_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_boolean},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_boolean,
+    occurrence: "1"
+  },
   params_type: [
-    {type: Fleur.Node, occurence: "*"}
+    {
+      occurrence: "*"
+    }
   ]
 };
 Fleur.Context.prototype.fn_exists_1 = function() {
-	const previtem = this.item;
-	this.item = new Fleur.Text();
+  const previtem = this.item;
+  this.item = new Fleur.Text();
   this.item.data = String(previtem.isNotEmpty())
-	this.item.schemaTypeInfo = Fleur.Type_boolean;
+  this.item.schemaTypeInfo = Fleur.Type_boolean;
   return this;
 };
 Fleur.XPathFunctions_fn["exists#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:exists",
-	function(arg) {
-		return arg !== Fleur.EmptySequence;
-	},
-	null, [{type: Fleur.Node, occurence: "*"}], false, false, {type: Fleur.Type_boolean});
+  function(arg) {
+    return arg !== Fleur.EmptySequence;
+  },
+  null, [{type: Fleur.Node, occurence: "*"}], false, false, {type: Fleur.Type_boolean});
 Fleur.signatures.fn_false_0 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_boolean},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_boolean,
+    occurrence: "1"
+  },
   params_type: []
 };
 Fleur.Context.prototype.fn_false_0 = function() {
   this.itemstack.push(this.item);
-	const item = new Fleur.Text();
-	item.appendData("false");
-	item.schemaTypeInfo = Fleur.Type_boolean;
+  const item = new Fleur.Text();
+  item.appendData("false");
+  item.schemaTypeInfo = Fleur.Type_boolean;
   this.item = item;
   return this;
 };
 Fleur.XPathFunctions_fn["false#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:false",
-	function() {
-		return false;
-	},
-	null, [], false, false, {type: Fleur.Type_boolean});
+  function() {
+    return false;
+  },
+  null, [], false, false, {type: Fleur.Type_boolean});
 Fleur.signatures.fn_floor_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_double, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.fn_floor_1 = function() {
@@ -8060,1327 +8500,2015 @@ Fleur.Context.prototype.fn_floor_1 = function() {
   return this;
 };
 Fleur.XPathFunctions_fn["floor#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:floor",
-	function(a) {
-		return a ? [typeof a[0] === "bigint" ? a[0] : Math.floor(a[0]), a[1]] : null;
-	},
-	null, [{type: Fleur.numericTypes, adaptative: true, occurence: "?"}], false, false, {type: Fleur.numericTypes, adaptative: true, occurence: "?"});
+  function(a) {
+    return a ? [typeof a[0] === "bigint" ? a[0] : Math.floor(a[0]), a[1]] : null;
+  },
+  null, [{type: Fleur.numericTypes, adaptative: true, occurence: "?"}], false, false, {type: Fleur.numericTypes, adaptative: true, occurence: "?"});
+Fleur.signatures.fn_format$_date_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_date,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["format-date#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:format-date",
-	function(value, picture, ctx) {
-		return Fleur.XPathFunctions_fn["format-dateTime#5"].jsfunc(value, picture, null, null, null, ctx, true, false);
-	},
-	null, [{type: Fleur.Type_date, occurence: "?"}, {type: Fleur.Type_string}], true, false, {type: Fleur.Type_string, occurence: "?"});
+  function(value, picture, ctx) {
+    return Fleur.XPathFunctions_fn["format-dateTime#5"].jsfunc(value, picture, null, null, null, ctx, true, false);
+  },
+  null, [{type: Fleur.Type_date, occurence: "?"}, {type: Fleur.Type_string}], true, false, {type: Fleur.Type_string, occurence: "?"});
 Fleur.XPathFunctions_fn["format-date#5"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:format-date",
-	function(value, picture, language, calendar, place, ctx) {
-		return Fleur.XPathFunctions_fn["format-dateTime#5"].jsfunc(value, picture, language, calendar, place, ctx, true, false);
-	},
-	null, [{type: Fleur.Type_date, occurence: "?"}, {type: Fleur.Type_string}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}], true, false, {type: Fleur.Type_string, occurence: "?"});
+  function(value, picture, language, calendar, place, ctx) {
+    return Fleur.XPathFunctions_fn["format-dateTime#5"].jsfunc(value, picture, language, calendar, place, ctx, true, false);
+  },
+  null, [{type: Fleur.Type_date, occurence: "?"}, {type: Fleur.Type_string}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}], true, false, {type: Fleur.Type_string, occurence: "?"});
+Fleur.signatures.fn_format$_dateTime_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_dateTime,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["format-dateTime#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:format-dateTime",
-	function(value, picture, ctx) {
-		return Fleur.XPathFunctions_fn["format-dateTime#5"].jsfunc(value, picture, null, null, null, ctx, false, false);
-	},
-	null, [{type: Fleur.Type_dateTime, occurence: "?"}, {type: Fleur.Type_string}], true, false, {type: Fleur.Type_string, occurence: "?"});
+  function(value, picture, ctx) {
+    return Fleur.XPathFunctions_fn["format-dateTime#5"].jsfunc(value, picture, null, null, null, ctx, false, false);
+  },
+  null, [{type: Fleur.Type_dateTime, occurence: "?"}, {type: Fleur.Type_string}], true, false, {type: Fleur.Type_string, occurence: "?"});
 Fleur.XPathFunctions_fn["format-dateTime#5"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:format-dateTime",
-	function(value, picture, language, calendar, place, ctx, notime, nodate) {
-		var s = "";
-		var i = 0, l = picture.length;
-		var format = "";
-		var pdate = false;
-		var ptime = false;
-		var valueDate = notime ? Fleur.toDate(value) : nodate ? Fleur.toTime(value) : Fleur.toDateTime(value);
-		language = language || Fleur.defaultLanguage;
-		while (i < l) {
-			var c = picture.charAt(i);
-			var prec = "";
-			while (c !== "[" && i < l) {
-				if (c !== "]") {
-					s += c;
-				} else if (prec === c) {
-					s += c;
-					c = "";
-				}
-				prec = c;
-				c = picture.charAt(++i);
-			}
-			if (c === "[") {
-				c = picture.charAt(++i);
-				if (c === "[") {
-					s += c;
-					i++;
-				} else {
-					format = "";
-					while (c !== "]" && i < l) {
-						format += c;
-						c = picture.charAt(++i);
-					}
-					if (c === "]") {
-						var intvalue = null, stringvalue = null;
-						switch(format.charAt(0)) {
-							case "Y":
-								pdate = true;
-								if (format.charAt(1).toLowerCase() === "i") {
-									stringvalue = Fleur.convertToRoman(parseInt(value.substr(0, 4), 10));
-									if (format.charAt(1) === "i") {
-										stringvalue = stringvalue.toLowerCase();
-									}
-								} else {
-									intvalue = parseInt(value.substr(0, 4), 10);
-								}
-								break;
-							case "M":
-								pdate = true;
-								if (format.charAt(1).toLowerCase() === "i") {
-									stringvalue = Fleur.convertToRoman(parseInt(value.substr(5, 2), 10));
-									if (format.charAt(1) === "i") {
-										stringvalue = stringvalue.toLowerCase();
-									}
-								} else if (format.charAt(1).toLowerCase() === "n") {
-									stringvalue = Fleur.getMonthName(language, valueDate.d);
-									if (format.charAt(1) === "N") {
-										if (format.charAt(2) === "n") {
-											stringvalue = stringvalue.charAt(0).toUpperCase() + stringvalue.substr(1).toLowerCase();
-										} else {
-											stringvalue = stringvalue.toUpperCase();
-										}
-									} else {
-										stringvalue = stringvalue.toLowerCase();
-									}
-								} else {
-									intvalue = parseInt(value.substr(5, 2), 10);
-								}
-								break;
-							case "D":
-								pdate = true;
-								intvalue = parseInt(value.substr(8, 2), 10);
-								break;
-							case "d":
-								break;
-							case "F":
-								pdate = true;
-								stringvalue = Fleur.getDayName(language, valueDate.d);
-								if (format.charAt(1) === "N") {
-									if (format.charAt(2) === "n") {
-										stringvalue = stringvalue.charAt(0).toUpperCase() + stringvalue.substr(1).toLowerCase();
-									} else {
-										stringvalue = stringvalue.toUpperCase();
-									}
-								} else {
-									stringvalue = stringvalue.toLowerCase();
-								}
-								break;
-							case "W":
-								break;
-							case "w":
-								break;
-							case "H":
-								break;
-							case "h":
-								ptime = true;
-								intvalue = parseInt(value.substr(nodate ? 0 : 11, 2), 10);
-								break;
-							case "P":
-								break;
-							case "m":
-								ptime = true;
-								intvalue = parseInt(value.substr(nodate ? 3 : 14, 2), 10);
-								break;
-							case "s":
-								ptime = true;
-								intvalue = parseInt(value.substr(nodate ? 6 : 17, 2), 10);
-								break;
-							case "f":
-								break;
-							case "Z":
-								break;
-							case "z":
-								break;
-							case "C":
-								break;
-							case "E":
-								break;
-						}
-						if ((ptime && notime) || (pdate && nodate)) {
-							return Fleur.error(ctx, "FOFD1350");
-						}
-						if (intvalue !== null || stringvalue !== null) {
-							format = format.split(',');
-							var maxw, minw;
-							if (format[1]) {
-								var ws = format[1].split('-');
-								minw = ws[0] === "*" ? 1 : parseInt(ws[0], 10);
-								maxw = !ws[1] || ws[1] === "*" ? Infinity : parseInt(ws[1], 10);
-							} else {
-								minw = Math.max(format[0].length - 1, 1);
-								maxw = Infinity;
-							}
-							if (intvalue !== null) {
-								stringvalue = String(intvalue);
-							}
-							stringvalue = "0".repeat(Math.max(minw - stringvalue.length, 0)) + stringvalue;
-							if (stringvalue.length > maxw) {
-								if (format[0].charAt(0) === 'Y') {
-									stringvalue = stringvalue.substr(stringvalue.length - maxw);
-								}
-							}
-						}
-						if (stringvalue !== null) {
-							s += stringvalue;
-						}
-						i++;
-					}
-				}
-			}
-		}
-		return s;
-	},
-	null, [{type: Fleur.Type_dateTime, occurence: "?"}, {type: Fleur.Type_string}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}], true, false, {type: Fleur.Type_string, occurence: "?"});
+  function(value, picture, language, calendar, place, ctx, notime, nodate) {
+    var s = "";
+    var i = 0, l = picture.length;
+    var format = "";
+    var pdate = false;
+    var ptime = false;
+    var valueDate = notime ? Fleur.toDate(value) : nodate ? Fleur.toTime(value) : Fleur.toDateTime(value);
+    language = language || Fleur.defaultLanguage;
+    while (i < l) {
+      var c = picture.charAt(i);
+      var prec = "";
+      while (c !== "[" && i < l) {
+        if (c !== "]") {
+          s += c;
+        } else if (prec === c) {
+          s += c;
+          c = "";
+        }
+        prec = c;
+        c = picture.charAt(++i);
+      }
+      if (c === "[") {
+        c = picture.charAt(++i);
+        if (c === "[") {
+          s += c;
+          i++;
+        } else {
+          format = "";
+          while (c !== "]" && i < l) {
+            format += c;
+            c = picture.charAt(++i);
+          }
+          if (c === "]") {
+            var intvalue = null, stringvalue = null;
+            switch(format.charAt(0)) {
+              case "Y":
+                pdate = true;
+                if (format.charAt(1).toLowerCase() === "i") {
+                  stringvalue = Fleur.convertToRoman(parseInt(value.substr(0, 4), 10));
+                  if (format.charAt(1) === "i") {
+                    stringvalue = stringvalue.toLowerCase();
+                  }
+                } else {
+                  intvalue = parseInt(value.substr(0, 4), 10);
+                }
+                break;
+              case "M":
+                pdate = true;
+                if (format.charAt(1).toLowerCase() === "i") {
+                  stringvalue = Fleur.convertToRoman(parseInt(value.substr(5, 2), 10));
+                  if (format.charAt(1) === "i") {
+                    stringvalue = stringvalue.toLowerCase();
+                  }
+                } else if (format.charAt(1).toLowerCase() === "n") {
+                  stringvalue = Fleur.getMonthName(language, valueDate.d);
+                  if (format.charAt(1) === "N") {
+                    if (format.charAt(2) === "n") {
+                      stringvalue = stringvalue.charAt(0).toUpperCase() + stringvalue.substr(1).toLowerCase();
+                    } else {
+                      stringvalue = stringvalue.toUpperCase();
+                    }
+                  } else {
+                    stringvalue = stringvalue.toLowerCase();
+                  }
+                } else {
+                  intvalue = parseInt(value.substr(5, 2), 10);
+                }
+                break;
+              case "D":
+                pdate = true;
+                intvalue = parseInt(value.substr(8, 2), 10);
+                break;
+              case "d":
+                break;
+              case "F":
+                pdate = true;
+                stringvalue = Fleur.getDayName(language, valueDate.d);
+                if (format.charAt(1) === "N") {
+                  if (format.charAt(2) === "n") {
+                    stringvalue = stringvalue.charAt(0).toUpperCase() + stringvalue.substr(1).toLowerCase();
+                  } else {
+                    stringvalue = stringvalue.toUpperCase();
+                  }
+                } else {
+                  stringvalue = stringvalue.toLowerCase();
+                }
+                break;
+              case "W":
+                break;
+              case "w":
+                break;
+              case "H":
+                break;
+              case "h":
+                ptime = true;
+                intvalue = parseInt(value.substr(nodate ? 0 : 11, 2), 10);
+                break;
+              case "P":
+                break;
+              case "m":
+                ptime = true;
+                intvalue = parseInt(value.substr(nodate ? 3 : 14, 2), 10);
+                break;
+              case "s":
+                ptime = true;
+                intvalue = parseInt(value.substr(nodate ? 6 : 17, 2), 10);
+                break;
+              case "f":
+                break;
+              case "Z":
+                break;
+              case "z":
+                break;
+              case "C":
+                break;
+              case "E":
+                break;
+            }
+            if ((ptime && notime) || (pdate && nodate)) {
+              return Fleur.error(ctx, "FOFD1350");
+            }
+            if (intvalue !== null || stringvalue !== null) {
+              format = format.split(',');
+              var maxw, minw;
+              if (format[1]) {
+                var ws = format[1].split('-');
+                minw = ws[0] === "*" ? 1 : parseInt(ws[0], 10);
+                maxw = !ws[1] || ws[1] === "*" ? Infinity : parseInt(ws[1], 10);
+              } else {
+                minw = Math.max(format[0].length - 1, 1);
+                maxw = Infinity;
+              }
+              if (intvalue !== null) {
+                stringvalue = String(intvalue);
+              }
+              stringvalue = "0".repeat(Math.max(minw - stringvalue.length, 0)) + stringvalue;
+              if (stringvalue.length > maxw) {
+                if (format[0].charAt(0) === 'Y') {
+                  stringvalue = stringvalue.substr(stringvalue.length - maxw);
+                }
+              }
+            }
+            if (stringvalue !== null) {
+              s += stringvalue;
+            }
+            i++;
+          }
+        }
+      }
+    }
+    return s;
+  },
+  null, [{type: Fleur.Type_dateTime, occurence: "?"}, {type: Fleur.Type_string}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}], true, false, {type: Fleur.Type_string, occurence: "?"});
+Fleur.signatures.fn_format$_integer_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_integer,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    }
+  ]
+};
 Fleur.romanValues = [1000, 900, 500, 400, 100, 90, 50, 40, 10, 9, 5, 4, 1];
 Fleur.romanLetters = ["M", "CM", "D", "CD", "C", "XC", "L", "XL", "X", "IX", "V", "IV", "I"];
 Fleur.convertToRoman = function(num, index) {
-	if (Number(num) === 0) {
-		return "";
-	}
-	for (var i = index || 0; i < 13; i++) {
-		if (num >= Fleur.romanValues[i]) {
-			return Fleur.romanLetters[i] + Fleur.convertToRoman(Number(num) - Fleur.romanValues[i], i);
-		}
-	}
+  if (Number(num) === 0) {
+    return "";
+  }
+  for (var i = index || 0; i < 13; i++) {
+    if (num >= Fleur.romanValues[i]) {
+      return Fleur.romanLetters[i] + Fleur.convertToRoman(Number(num) - Fleur.romanValues[i], i);
+    }
+  }
 };
 Fleur.XPathFunctions_fn["format-integer#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:format-integer",
-	function(value, picture) {
-		var i, j, l, l2, pictures, dss, ess, ps, pms, ms, msbefore, psafter, pmsafter, signs, esigns, iipgp, ipgp, mips, prefix, fstart, fpgp, minfps, maxfps, mes, suffix, dsspos, evalue, esign, s0, s;
-		pictures = picture.split(";");
-		picture = value < 0 && pictures[1] ? pictures[1] : pictures[0];
-		signs = ".,-%\u2030#0123456789";
-		esigns = ".,e-%\u2030#0123456789";
-		i = 0;
-		l = picture.length;
-		while (i < l && signs.indexOf(picture.charAt(i)) === -1) {
-			i++;
-		}
-		prefix = picture.substring(0, i);
-		dss = ess = ps = pms = false;
-		mips = 0;
-		minfps = 0;
-		maxfps = 0;
-		mes = 0;
-		iipgp = [];
-		ipgp = [];
-		fpgp = [];
-		while (i < l && esigns.indexOf(picture.charAt(i)) !== -1) {
-			switch (picture.charAt(i)) {
-				case ".":
-					dss = true;
-					fstart = i + 1;
-					j = 0;
-					l2 = iipgp.length;
-					while (j < l2) {
-						ipgp[l2 - j - 1] = i - iipgp[j] - 1;
-						j++;
-					}
-					break;
-				case ",":
-					if (dss) {
-						fpgp.push(i - fstart);
-					} else {
-						iipgp.push(i);
-					}
-					break;
-				case "e":
-					ess = true;
-					if (!dss) {
-						j = 0;
-						l2 = iipgp.length;
-						while (j < l2) {
-							ipgp[l2 - j - 1] = i - iipgp[j] - 1;
-							j++;
-						}
-					}
-					break;
-				case "-":
-					ms = true;
-					msbefore = mips === 0;
-					break;
-				case "%":
-					ps = true;
-					psafter = mips !== 0;
-					value *= Fleur.BigInt(100);
-					if (!dss) {
-						j = 0;
-						l2 = iipgp.length;
-						while (j < l2) {
-							ipgp[l2 - j - 1] = i - iipgp[j] - 1;
-							j++;
-						}
-					}
-					break;
-				case "\u2030":
-					pms = true;
-					pmsafter = mips !== 0;
-					value *= Fleur.BigInt(1000);
-					if (!dss) {
-						j = 0;
-						l2 = iipgp.length;
-						while (j < l2) {
-							ipgp[l2 - j - 1] = i - iipgp[j] - 1;
-							j++;
-						}
-					}
-					break;
-				case "0":
-				case "1":
-				case "2":
-				case "3":
-				case "4":
-				case "5":
-				case "6":
-				case "7":
-				case "8":
-				case "9":
-					if (ess) {
-						mes++;
-					} else if (dss) {
-						minfps++;
-						maxfps++;
-					} else {
-						mips++;
-					}
-					break;
-				case "#":
-					if (dss) {
-						maxfps++;
-					}
-					break;
-			}
-			i++;
-		}
-		if (!dss) {
-			if (iipgp.length !== ipgp.length) {
-				j = 0;
-				l2 = iipgp.length;
-				while (j < l2) {
-					ipgp[l2 - j - 1] = i - iipgp[j] - 1;
-					j++;
-				}
-			}
-			if (mips === 0) {
-				mips = 1;
-			}
-		}
-		if (ipgp.length > 1) {
-			j = 1;
-			l2 = ipgp.length;
-			while (j < l2 && ipgp[j] % ipgp[0] === 0) {
-				j++;
-			}
-			if (j === l2) {
-				ipgp = [ipgp[0]];
-			}
-		}
-		if (ipgp.length === 1) {
-			j = 1;
-			while (j < 30) {
-				ipgp[j] = ipgp[j - 1] + ipgp[0];
-				j++;
-			}
-		}
-		suffix = picture.substring(i);
-		if (value === Number.POSITIVE_INFINITY) {
-			return prefix + "Infinity" + suffix;
-		} else if (value === Number.NEGATIVE_INFINITY) {
-			return "-" + prefix + "Infinity" + suffix;
-		}
-		if (value < 0 && pictures.length === 1) {
-			prefix = "-" + prefix;
-		}
-		if (ess) {
-			evalue = Math.floor(Math.log(value) / Math.LN10) + 1 - mips;
-			value /= Math.pow(10, evalue);
-			esign = evalue < 0 ? "-" : "";
-			evalue = String(Math.abs(evalue));
-			evalue = esign + ("000000000000000000000000000000").substr(0, Math.max(0, mes - evalue.length)) + evalue;
-		}
-		s0 = Math.abs(Number(value)).toFixed(maxfps);
-		if (maxfps === 0 && dss) {
-			s0 += ".";
-		}
-		dsspos = s0.indexOf(".") === -1 ? s0.length : s0.indexOf(".");
-		if (dsspos < mips) {
-			s0 = ("000000000000000000000000000000").substr(0, mips - dsspos) + s0;
-			dsspos = mips;
-		}
-		j = dsspos - 1;
-		s = "";
-		i = 0;
-		l2 = s0.length;
-		while (j >= 0) {
-			s = s0.charAt(j) + s;
-			if (j !== 0 && ipgp[i] === dsspos - j) {
-				s = "," + s;
-				i++;
-			}
-			j--;
-		}
-		if (dss) {
-			s += ".";
-			j = dsspos + 1;
-			i = 0;
-			while (j < l2) {
-				s += s0.charAt(j);
-				if (j !== l2 - 1 && fpgp[i] === j - dsspos) {
-					s += ",";
-					i++;
-				}
-				j++;
-			}
-		}
-		if (ps) {
-			if (psafter) {
-				s += "%";
-			} else {
-				s = "%" + s;
-			}
-		}
-		if (pms) {
-			if (pmsafter) {
-				s += "\u2030";
-			} else {
-				s = "\u2030" + s;
-			}
-		}
-		if (ess) {
-			s += "e" + evalue;
-		}
-		return prefix + s + suffix;
-	},
-	null, [{type: Fleur.Type_integer, occurence: "?"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_string});
+  function(value, picture) {
+    var i, j, l, l2, pictures, dss, ess, ps, pms, ms, msbefore, psafter, pmsafter, signs, esigns, iipgp, ipgp, mips, prefix, fstart, fpgp, minfps, maxfps, mes, suffix, dsspos, evalue, esign, s0, s;
+    pictures = picture.split(";");
+    picture = value < 0 && pictures[1] ? pictures[1] : pictures[0];
+    signs = ".,-%\u2030#0123456789";
+    esigns = ".,e-%\u2030#0123456789";
+    i = 0;
+    l = picture.length;
+    while (i < l && signs.indexOf(picture.charAt(i)) === -1) {
+      i++;
+    }
+    prefix = picture.substring(0, i);
+    dss = ess = ps = pms = false;
+    mips = 0;
+    minfps = 0;
+    maxfps = 0;
+    mes = 0;
+    iipgp = [];
+    ipgp = [];
+    fpgp = [];
+    while (i < l && esigns.indexOf(picture.charAt(i)) !== -1) {
+      switch (picture.charAt(i)) {
+        case ".":
+          dss = true;
+          fstart = i + 1;
+          j = 0;
+          l2 = iipgp.length;
+          while (j < l2) {
+            ipgp[l2 - j - 1] = i - iipgp[j] - 1;
+            j++;
+          }
+          break;
+        case ",":
+          if (dss) {
+            fpgp.push(i - fstart);
+          } else {
+            iipgp.push(i);
+          }
+          break;
+        case "e":
+          ess = true;
+          if (!dss) {
+            j = 0;
+            l2 = iipgp.length;
+            while (j < l2) {
+              ipgp[l2 - j - 1] = i - iipgp[j] - 1;
+              j++;
+            }
+          }
+          break;
+        case "-":
+          ms = true;
+          msbefore = mips === 0;
+          break;
+        case "%":
+          ps = true;
+          psafter = mips !== 0;
+          value *= Fleur.BigInt(100);
+          if (!dss) {
+            j = 0;
+            l2 = iipgp.length;
+            while (j < l2) {
+              ipgp[l2 - j - 1] = i - iipgp[j] - 1;
+              j++;
+            }
+          }
+          break;
+        case "\u2030":
+          pms = true;
+          pmsafter = mips !== 0;
+          value *= Fleur.BigInt(1000);
+          if (!dss) {
+            j = 0;
+            l2 = iipgp.length;
+            while (j < l2) {
+              ipgp[l2 - j - 1] = i - iipgp[j] - 1;
+              j++;
+            }
+          }
+          break;
+        case "0":
+        case "1":
+        case "2":
+        case "3":
+        case "4":
+        case "5":
+        case "6":
+        case "7":
+        case "8":
+        case "9":
+          if (ess) {
+            mes++;
+          } else if (dss) {
+            minfps++;
+            maxfps++;
+          } else {
+            mips++;
+          }
+          break;
+        case "#":
+          if (dss) {
+            maxfps++;
+          }
+          break;
+      }
+      i++;
+    }
+    if (!dss) {
+      if (iipgp.length !== ipgp.length) {
+        j = 0;
+        l2 = iipgp.length;
+        while (j < l2) {
+          ipgp[l2 - j - 1] = i - iipgp[j] - 1;
+          j++;
+        }
+      }
+      if (mips === 0) {
+        mips = 1;
+      }
+    }
+    if (ipgp.length > 1) {
+      j = 1;
+      l2 = ipgp.length;
+      while (j < l2 && ipgp[j] % ipgp[0] === 0) {
+        j++;
+      }
+      if (j === l2) {
+        ipgp = [ipgp[0]];
+      }
+    }
+    if (ipgp.length === 1) {
+      j = 1;
+      while (j < 30) {
+        ipgp[j] = ipgp[j - 1] + ipgp[0];
+        j++;
+      }
+    }
+    suffix = picture.substring(i);
+    if (value === Number.POSITIVE_INFINITY) {
+      return prefix + "Infinity" + suffix;
+    } else if (value === Number.NEGATIVE_INFINITY) {
+      return "-" + prefix + "Infinity" + suffix;
+    }
+    if (value < 0 && pictures.length === 1) {
+      prefix = "-" + prefix;
+    }
+    if (ess) {
+      evalue = Math.floor(Math.log(value) / Math.LN10) + 1 - mips;
+      value /= Math.pow(10, evalue);
+      esign = evalue < 0 ? "-" : "";
+      evalue = String(Math.abs(evalue));
+      evalue = esign + ("000000000000000000000000000000").substr(0, Math.max(0, mes - evalue.length)) + evalue;
+    }
+    s0 = Math.abs(Number(value)).toFixed(maxfps);
+    if (maxfps === 0 && dss) {
+      s0 += ".";
+    }
+    dsspos = s0.indexOf(".") === -1 ? s0.length : s0.indexOf(".");
+    if (dsspos < mips) {
+      s0 = ("000000000000000000000000000000").substr(0, mips - dsspos) + s0;
+      dsspos = mips;
+    }
+    j = dsspos - 1;
+    s = "";
+    i = 0;
+    l2 = s0.length;
+    while (j >= 0) {
+      s = s0.charAt(j) + s;
+      if (j !== 0 && ipgp[i] === dsspos - j) {
+        s = "," + s;
+        i++;
+      }
+      j--;
+    }
+    if (dss) {
+      s += ".";
+      j = dsspos + 1;
+      i = 0;
+      while (j < l2) {
+        s += s0.charAt(j);
+        if (j !== l2 - 1 && fpgp[i] === j - dsspos) {
+          s += ",";
+          i++;
+        }
+        j++;
+      }
+    }
+    if (ps) {
+      if (psafter) {
+        s += "%";
+      } else {
+        s = "%" + s;
+      }
+    }
+    if (pms) {
+      if (pmsafter) {
+        s += "\u2030";
+      } else {
+        s = "\u2030" + s;
+      }
+    }
+    if (ess) {
+      s += "e" + evalue;
+    }
+    return prefix + s + suffix;
+  },
+  null, [{type: Fleur.Type_integer, occurence: "?"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_string});
+Fleur.signatures.fn_format$_number_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["format-number#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:format-number",
-	function(value, picture) {
-		var i, j, l, l2, pictures, dss, ess, ps, pms, ms, msbefore, psafter, pmsafter, signs, esigns, iipgp, ipgp, mips, prefix, fstart, fpgp, minfps, maxfps, mes, suffix, dsspos, evalue, esign, s0, s;
-		pictures = picture.split(";");
-		picture = value < 0 && pictures[1] ? pictures[1] : pictures[0];
-		signs = ".,-%\u2030#0123456789";
-		esigns = ".,e-%\u2030#0123456789";
-		i = 0;
-		l = picture.length;
-		while (i < l && signs.indexOf(picture.charAt(i)) === -1) {
-			i++;
-		}
-		prefix = picture.substring(0, i);
-		dss = ess = ps = pms = false;
-		mips = 0;
-		minfps = 0;
-		maxfps = 0;
-		mes = 0;
-		iipgp = [];
-		ipgp = [];
-		fpgp = [];
-		while (i < l && esigns.indexOf(picture.charAt(i)) !== -1) {
-			switch (picture.charAt(i)) {
-				case ".":
-					dss = true;
-					fstart = i + 1;
-					j = 0;
-					l2 = iipgp.length;
-					while (j < l2) {
-						ipgp[l2 - j - 1] = i - iipgp[j] - 1;
-						j++;
-					}
-					break;
-				case ",":
-					if (dss) {
-						fpgp.push(i - fstart);
-					} else {
-						iipgp.push(i);
-					}
-					break;
-				case "e":
-					ess = true;
-					if (!dss) {
-						j = 0;
-						l2 = iipgp.length;
-						while (j < l2) {
-							ipgp[l2 - j - 1] = i - iipgp[j] - 1;
-							j++;
-						}
-					}
-					break;
-				case "-":
-					ms = true;
-					msbefore = mips === 0;
-					break;
-				case "%":
-					ps = true;
-					psafter = mips !== 0;
-					value *= 100;
-					if (!dss) {
-						j = 0;
-						l2 = iipgp.length;
-						while (j < l2) {
-							ipgp[l2 - j - 1] = i - iipgp[j] - 1;
-							j++;
-						}
-					}
-					break;
-				case "\u2030":
-					pms = true;
-					pmsafter = mips !== 0;
-					value *= 1000;
-					if (!dss) {
-						j = 0;
-						l2 = iipgp.length;
-						while (j < l2) {
-							ipgp[l2 - j - 1] = i - iipgp[j] - 1;
-							j++;
-						}
-					}
-					break;
-				case "0":
-				case "1":
-				case "2":
-				case "3":
-				case "4":
-				case "5":
-				case "6":
-				case "7":
-				case "8":
-				case "9":
-					if (ess) {
-						mes++;
-					} else if (dss) {
-						minfps++;
-						maxfps++;
-					} else {
-						mips++;
-					}
-					break;
-				case "#":
-					if (dss) {
-						maxfps++;
-					}
-					break;
-			}
-			i++;
-		}
-		if (!dss) {
-			if (iipgp.length !== ipgp.length) {
-				j = 0;
-				l2 = iipgp.length;
-				while (j < l2) {
-					ipgp[l2 - j - 1] = i - iipgp[j] - 1;
-					j++;
-				}
-			}
-			if (mips === 0) {
-				mips = 1;
-			}
-		}
-		if (ipgp.length > 1) {
-			j = 1;
-			l2 = ipgp.length;
-			while (j < l2 && ipgp[j] % ipgp[0] === 0) {
-				j++;
-			}
-			if (j === l2) {
-				ipgp = [ipgp[0]];
-			}
-		}
-		if (ipgp.length === 1) {
-			j = 1;
-			while (j < 30) {
-				ipgp[j] = ipgp[j - 1] + ipgp[0];
-				j++;
-			}
-		}
-		suffix = picture.substring(i);
-		if (Number(value) === Number.POSITIVE_INFINITY) {
-			return prefix + "Infinity" + suffix;
-		} else if (Number(value) === Number.NEGATIVE_INFINITY) {
-			return "-" + prefix + "Infinity" + suffix;
-		}
-		if (value < 0 && pictures.length === 1) {
-			prefix = "-" + prefix;
-		}
-		if (ess) {
-			evalue = Math.floor(Math.log(Number(value)) / Math.LN10) + 1 - mips;
-			value = Number(value) / Math.pow(10, evalue);
-			esign = evalue < 0 ? "-" : "";
-			evalue = String(Math.abs(evalue));
-			evalue = esign + ("000000000000000000000000000000").substr(0, Math.max(0, mes - evalue.length)) + evalue;
-		}
-		s0 = Math.abs(Number(value)).toFixed(maxfps);
-		if (maxfps === 0 && dss) {
-			s0 += ".";
-		}
-		dsspos = s0.indexOf(".") === -1 ? s0.length : s0.indexOf(".");
-		if (dsspos < mips) {
-			s0 = ("000000000000000000000000000000").substr(0, mips - dsspos) + s0;
-			dsspos = mips;
-		}
-		j = dsspos - 1;
-		s = "";
-		i = 0;
-		l2 = s0.length;
-		while (j >= 0) {
-			s = s0.charAt(j) + s;
-			if (j !== 0 && ipgp[i] === dsspos - j) {
-				s = "," + s;
-				i++;
-			}
-			j--;
-		}
-		if (dss) {
-			s += ".";
-			j = dsspos + 1;
-			i = 0;
-			while (j < l2) {
-				s += s0.charAt(j);
-				if (j !== l2 - 1 && fpgp[i] === j - dsspos) {
-					s += ",";
-					i++;
-				}
-				j++;
-			}
-		}
-		if (ps) {
-			if (psafter) {
-				s += "%";
-			} else {
-				s = "%" + s;
-			}
-		}
-		if (pms) {
-			if (pmsafter) {
-				s += "\u2030";
-			} else {
-				s = "\u2030" + s;
-			}
-		}
-		if (ess) {
-			s += "e" + evalue;
-		}
-		return prefix + s + suffix;
-	},
-	null, [{type: Fleur.numericTypes, occurence: "?"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_string});
+  function(value, picture) {
+    var i, j, l, l2, pictures, dss, ess, ps, pms, ms, msbefore, psafter, pmsafter, signs, esigns, iipgp, ipgp, mips, prefix, fstart, fpgp, minfps, maxfps, mes, suffix, dsspos, evalue, esign, s0, s;
+    pictures = picture.split(";");
+    picture = value < 0 && pictures[1] ? pictures[1] : pictures[0];
+    signs = ".,-%\u2030#0123456789";
+    esigns = ".,e-%\u2030#0123456789";
+    i = 0;
+    l = picture.length;
+    while (i < l && signs.indexOf(picture.charAt(i)) === -1) {
+      i++;
+    }
+    prefix = picture.substring(0, i);
+    dss = ess = ps = pms = false;
+    mips = 0;
+    minfps = 0;
+    maxfps = 0;
+    mes = 0;
+    iipgp = [];
+    ipgp = [];
+    fpgp = [];
+    while (i < l && esigns.indexOf(picture.charAt(i)) !== -1) {
+      switch (picture.charAt(i)) {
+        case ".":
+          dss = true;
+          fstart = i + 1;
+          j = 0;
+          l2 = iipgp.length;
+          while (j < l2) {
+            ipgp[l2 - j - 1] = i - iipgp[j] - 1;
+            j++;
+          }
+          break;
+        case ",":
+          if (dss) {
+            fpgp.push(i - fstart);
+          } else {
+            iipgp.push(i);
+          }
+          break;
+        case "e":
+          ess = true;
+          if (!dss) {
+            j = 0;
+            l2 = iipgp.length;
+            while (j < l2) {
+              ipgp[l2 - j - 1] = i - iipgp[j] - 1;
+              j++;
+            }
+          }
+          break;
+        case "-":
+          ms = true;
+          msbefore = mips === 0;
+          break;
+        case "%":
+          ps = true;
+          psafter = mips !== 0;
+          value *= 100;
+          if (!dss) {
+            j = 0;
+            l2 = iipgp.length;
+            while (j < l2) {
+              ipgp[l2 - j - 1] = i - iipgp[j] - 1;
+              j++;
+            }
+          }
+          break;
+        case "\u2030":
+          pms = true;
+          pmsafter = mips !== 0;
+          value *= 1000;
+          if (!dss) {
+            j = 0;
+            l2 = iipgp.length;
+            while (j < l2) {
+              ipgp[l2 - j - 1] = i - iipgp[j] - 1;
+              j++;
+            }
+          }
+          break;
+        case "0":
+        case "1":
+        case "2":
+        case "3":
+        case "4":
+        case "5":
+        case "6":
+        case "7":
+        case "8":
+        case "9":
+          if (ess) {
+            mes++;
+          } else if (dss) {
+            minfps++;
+            maxfps++;
+          } else {
+            mips++;
+          }
+          break;
+        case "#":
+          if (dss) {
+            maxfps++;
+          }
+          break;
+      }
+      i++;
+    }
+    if (!dss) {
+      if (iipgp.length !== ipgp.length) {
+        j = 0;
+        l2 = iipgp.length;
+        while (j < l2) {
+          ipgp[l2 - j - 1] = i - iipgp[j] - 1;
+          j++;
+        }
+      }
+      if (mips === 0) {
+        mips = 1;
+      }
+    }
+    if (ipgp.length > 1) {
+      j = 1;
+      l2 = ipgp.length;
+      while (j < l2 && ipgp[j] % ipgp[0] === 0) {
+        j++;
+      }
+      if (j === l2) {
+        ipgp = [ipgp[0]];
+      }
+    }
+    if (ipgp.length === 1) {
+      j = 1;
+      while (j < 30) {
+        ipgp[j] = ipgp[j - 1] + ipgp[0];
+        j++;
+      }
+    }
+    suffix = picture.substring(i);
+    if (Number(value) === Number.POSITIVE_INFINITY) {
+      return prefix + "Infinity" + suffix;
+    } else if (Number(value) === Number.NEGATIVE_INFINITY) {
+      return "-" + prefix + "Infinity" + suffix;
+    }
+    if (value < 0 && pictures.length === 1) {
+      prefix = "-" + prefix;
+    }
+    if (ess) {
+      evalue = Math.floor(Math.log(Number(value)) / Math.LN10) + 1 - mips;
+      value = Number(value) / Math.pow(10, evalue);
+      esign = evalue < 0 ? "-" : "";
+      evalue = String(Math.abs(evalue));
+      evalue = esign + ("000000000000000000000000000000").substr(0, Math.max(0, mes - evalue.length)) + evalue;
+    }
+    s0 = Math.abs(Number(value)).toFixed(maxfps);
+    if (maxfps === 0 && dss) {
+      s0 += ".";
+    }
+    dsspos = s0.indexOf(".") === -1 ? s0.length : s0.indexOf(".");
+    if (dsspos < mips) {
+      s0 = ("000000000000000000000000000000").substr(0, mips - dsspos) + s0;
+      dsspos = mips;
+    }
+    j = dsspos - 1;
+    s = "";
+    i = 0;
+    l2 = s0.length;
+    while (j >= 0) {
+      s = s0.charAt(j) + s;
+      if (j !== 0 && ipgp[i] === dsspos - j) {
+        s = "," + s;
+        i++;
+      }
+      j--;
+    }
+    if (dss) {
+      s += ".";
+      j = dsspos + 1;
+      i = 0;
+      while (j < l2) {
+        s += s0.charAt(j);
+        if (j !== l2 - 1 && fpgp[i] === j - dsspos) {
+          s += ",";
+          i++;
+        }
+        j++;
+      }
+    }
+    if (ps) {
+      if (psafter) {
+        s += "%";
+      } else {
+        s = "%" + s;
+      }
+    }
+    if (pms) {
+      if (pmsafter) {
+        s += "\u2030";
+      } else {
+        s = "\u2030" + s;
+      }
+    }
+    if (ess) {
+      s += "e" + evalue;
+    }
+    return prefix + s + suffix;
+  },
+  null, [{type: Fleur.numericTypes, occurence: "?"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_string});
+Fleur.signatures.fn_format$_time_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_time,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["format-time#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:format-time",
-	function(value, picture, ctx) {
-		return Fleur.XPathFunctions_fn["format-dateTime#5"].jsfunc(value, picture, null, null, null, ctx, false, true);
-	},
-	null, [{type: Fleur.Type_time, occurence: "?"}, {type: Fleur.Type_string}], true, false, {type: Fleur.Type_string, occurence: "?"});
+  function(value, picture, ctx) {
+    return Fleur.XPathFunctions_fn["format-dateTime#5"].jsfunc(value, picture, null, null, null, ctx, false, true);
+  },
+  null, [{type: Fleur.Type_time, occurence: "?"}, {type: Fleur.Type_string}], true, false, {type: Fleur.Type_string, occurence: "?"});
 Fleur.XPathFunctions_fn["format-time#5"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:format-time",
-	function(value, picture, language, calendar, place, ctx) {
-		return Fleur.XPathFunctions_fn["format-dateTime#5"].jsfunc(value, picture, language, calendar, place, ctx, false, true);
-	},
-	null, [{type: Fleur.Type_time, occurence: "?"}, {type: Fleur.Type_string}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}], true, false, {type: Fleur.Type_string, occurence: "?"});
+  function(value, picture, language, calendar, place, ctx) {
+    return Fleur.XPathFunctions_fn["format-dateTime#5"].jsfunc(value, picture, language, calendar, place, ctx, false, true);
+  },
+  null, [{type: Fleur.Type_time, occurence: "?"}, {type: Fleur.Type_string}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string, occurence: "?"}], true, false, {type: Fleur.Type_string, occurence: "?"});
+Fleur.signatures.fn_function$_arity_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "1"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.FUNCTION_NODE,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["function-arity#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:function-arity",
-	function(f) {
-		return f.argtypes.length;
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Type_integer});
+  function(f) {
+    return f.argtypes.length;
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Type_integer});
 Fleur.XPathFunctions_fn["function-lookup#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:function-lookup",
-	function(fqname, arity) {
-		if (fqname.namespaceURI === "http://www.w3.org/2005/xpath-functions" && fqname.localName === "concat" && arity > 1 && !Fleur.XPathFunctions[fqname.namespaceURI][fqname.localName + "#" + arity]) {
-			var cparam = [];
-			for (var i = 0; i < arity; i++) {
-				cparam[i] = {type: Fleur.Node};
-			}
-			Fleur.XPathFunctions[fqname.namespaceURI][fqname.localName + "#" + arity] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:concat", Fleur.XPathFunctions_fn["concat#"].jsfunc, null, cparam, false, false, {type: Fleur.Type_string});
-		}
-		return Fleur.XPathFunctions[fqname.namespaceURI] ? Fleur.XPathFunctions[fqname.namespaceURI][fqname.localName + "#" + arity] || null : null;
-	},
-	null, [{type: Fleur.Type_QName}, {type: Fleur.Type_integer}], false, false, {type: Fleur.Node});
+  function(fqname, arity) {
+    if (fqname.namespaceURI === "http://www.w3.org/2005/xpath-functions" && fqname.localName === "concat" && arity > 1 && !Fleur.XPathFunctions[fqname.namespaceURI][fqname.localName + "#" + arity]) {
+      var cparam = [];
+      for (var i = 0; i < arity; i++) {
+        cparam[i] = {type: Fleur.Node};
+      }
+      Fleur.XPathFunctions[fqname.namespaceURI][fqname.localName + "#" + arity] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:concat", Fleur.XPathFunctions_fn["concat#"].jsfunc, null, cparam, false, false, {type: Fleur.Type_string});
+    }
+    return Fleur.XPathFunctions[fqname.namespaceURI] ? Fleur.XPathFunctions[fqname.namespaceURI][fqname.localName + "#" + arity] || null : null;
+  },
+  null, [{type: Fleur.Type_QName}, {type: Fleur.Type_integer}], false, false, {type: Fleur.Node});
 Fleur.XPathFunctions_fn["function-name#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:function-name",
-	function(f) {
-		var	a = new Fleur.Text();
-		a.schemaTypeInfo = Fleur.Type_QName;
-		a._setNodeNameLocalNamePrefix(f.namespaceURI, f.nodeName);
-		return a;
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Type_QName});
+  function(f) {
+    var  a = new Fleur.Text();
+    a.schemaTypeInfo = Fleur.Type_QName;
+    a._setNodeNameLocalNamePrefix(f.namespaceURI, f.nodeName);
+    return a;
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Type_QName});
+Fleur.signatures.fn_has$_children_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_boolean,
+    occurrence: "1"
+  },
+  params_type: [
+    {
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["has-children#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:has-children",
-	function(ctx) {
-		return Fleur.XPathFunctions_fn["has-children#1"].jsfunc(ctx._curr);
-	},
-	null, [], true, false, {type: Fleur.Type_boolean});
+  function(ctx) {
+    return Fleur.XPathFunctions_fn["has-children#1"].jsfunc(ctx._curr);
+  },
+  null, [], true, false, {type: Fleur.Type_boolean});
 Fleur.XPathFunctions_fn["has-children#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:has-children",
-	function(node) {
-		if (node === null) {
-			return false;
-		}
-		if ((node.nodeType === Fleur.Node.TEXT_NODE && node.schemaTypeInfo !== Fleur.Type_untypedAtomic) || node.nodeType === Fleur.Node.FUNCTION_NODE) {
-			var e = new Error("");
-			e.name = "XPTY0004";
-			return e;
-		}
-		if (node.nodeType !== Fleur.Node.SEQUENCE_NODE && node.nodeType !== Fleur.Node.ATTRIBUTE_NODE) {
-			return node.childNodes && node.childNodes.length !== 0;
-		}
-		return false;
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_boolean});
+  function(node) {
+    if (node === null) {
+      return false;
+    }
+    if ((node.nodeType === Fleur.Node.TEXT_NODE && node.schemaTypeInfo !== Fleur.Type_untypedAtomic) || node.nodeType === Fleur.Node.FUNCTION_NODE) {
+      var e = new Error("");
+      e.name = "XPTY0004";
+      return e;
+    }
+    if (node.nodeType !== Fleur.Node.SEQUENCE_NODE && node.nodeType !== Fleur.Node.ATTRIBUTE_NODE) {
+      return node.childNodes && node.childNodes.length !== 0;
+    }
+    return false;
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_boolean});
  Fleur.signatures.fn_head_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Node},
+  return_type: null,
   params_type: [
-    {type: Fleur.Node, occurence: "*"}
+    {
+      occurrence: "*"
+    }
   ]
 };
 Fleur.Context.prototype.fn_head_1 = function() {
   if (this.item.nodeType === Fleur.Node.SEQUENCE_NODE && this.item.childNodes.length !== 0) {
-		this.item = this.item.childNodes[0];
-	}
+    this.item = this.item.childNodes[0];
+  }
   return this;
 };
 Fleur.XPathFunctions_fn["head#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:head",
-	function(arg) {
-		return arg === Fleur.EmptySequence || arg.nodeType !== Fleur.Node.SEQUENCE_NODE ? arg : arg.childNodes[0];
-	},
-	null, [{type: Fleur.Node, occurence: "*"}], false, false, {type: Fleur.Node});
-Fleur.XPathFunctions_fn["hours-from-dateTime#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:hours-from-dateTime",
-	function(arg) {
-		return arg !== null ? parseInt(arg.match(/^\d{4}-\d{2}-\d{2}T(\d{2}):\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})?$/)[1], 10) : null;
-	},
-	null, [{type: Fleur.Type_dateTime, occurence: "?"}], true, false, {type: Fleur.Type_integer, occurence: "?"});
-Fleur.XPathFunctions_fn["hours-from-duration#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:hours-from-duration",
-	function(arg) {
-		var a = Fleur.Atomize(arg);
-		var d;
-		if (a === Fleur.EmptySequence) {
-			return null;
-		}
-		if (a.schemaTypeInfo === Fleur.Type_yearMonthDuration) {
-			return 0;
-		}
-		if (a.schemaTypeInfo === Fleur.Type_dayTimeDuration) {
-			d = Fleur.toJSONDayTimeDuration(a.data);
-			return d.sign * d.hour;
-		}
-		if (a.schemaTypeInfo === Fleur.Type_duration) {
-			d = Fleur.toJSONDuration(a.data);
-			return d.sign * d.hour;
-		}
-		var e = new Error("");
-		e.name = "XPTY0004";
-		return e;
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_integer, occurence: "?"});
-Fleur.XPathFunctions_fn["hours-from-time#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:hours-from-time",
-	function(arg) {
-		return arg !== null ? parseInt(arg.match(/^(\d{2}):\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})?$/)[1], 10) : null;
-	},
-	null, [{type: Fleur.Type_time, occurence: "?"}], true, false, {type: Fleur.Type_integer, occurence: "?"});
-Fleur.XPathFunctions_fn["id#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:id",
-	function(arg, ctx) {
-		return Fleur.XPathFunctions_fn["id#2"].jsfunc(arg, ctx._curr);
-	},
-	null, [{type: Fleur.Type_string, occurence: "*"}], true, false, {type: Fleur.Node, occurence: "*"});
-Fleur.XPathFunctions_fn["id#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:id",
-	function(arg, node) {
-		if (!arg || !node || (!node.ownerDocument && node.nodeType !== Fleur.Node.DOCUMENT_NODE)) {
-			return null;
-		}
-		node = node.ownerDocument || node;
-		if (arg instanceof Array) {
-			var res = [];
-			arg.forEach(function(id) {
-				var elt = node.getElementById(id);
-				if (elt) {
-					res.push(elt);
-				}
-			});
-			return res.length === 0 ? null : res.length === 1 ? res[0] : node.sortNodes(res);
-		}
-		return node.getElementById(arg);
-	},
-	null, [{type: Fleur.Type_string, occurence: "*"}, {type: Fleur.Node}], false, false, {type: Fleur.Node, occurence: "*"});
-Fleur.XPathFunctions_fn["implicit-timezone#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:implicit-timezone",
-	function(ctx) {
-		var a = new Fleur.Text();
-		a.schemaTypeInfo = Fleur.Type_dayTimeDuration;
-		a.data = ctx.env.timezone;
-		return a;
-	},
-	null, [], true, false, {type: Fleur.Node, occurence: "?"});
-Fleur.XPathFunctions_fn["index-of#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:index-of",
-	function(seq, search) {
-		return Fleur.XPathFunctions_fn["index-of#3"].jsfunc(seq, search, "http://www.w3.org/2005/xpath-functions/collation/codepoint");
-	},
-	null, [{type: Fleur.Node, occurence: "*"}, {type: Fleur.Node}], false, false, {type: Fleur.Type_integer, occurence: "*"});
-Fleur.XPathFunctions_fn["index-of#3"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:index-of",
-	function(seq, search, collation) {
-		var c = Fleur.getCollation(collation);
-		if (!c) {
-			var e = new Error("");
-			e.name = "FOCH0002";
-			return e;
-		}
-		var a1 = Fleur.Atomize(seq, true);
-		if (a1 === Fleur.EmptySequence || a1.schemaTypeInfo === Fleur.Type_error) {
-			return a1;
-		}
-		var a2 = Fleur.Atomize(search);
-		if (a2.schemaTypeInfo === Fleur.Type_error) {
-			return a2;
-		}
-		if (a2.nodeType === Fleur.Node.SEQUENCE_NODE) {
-			e = new Error("");
-			e.name = "XPTY0004";
-			return e;
-		}
-		var v2 = Fleur.toJSValue(a2, true, true, true, true);
-		if (a1.nodeType !== Fleur.Node.SEQUENCE_NODE) {
-			var v1 = Fleur.toJSValue(a1, v2[0] < 4, true, true, true);
-			if (v1[0] === v2[0] && Fleur.eqOp(v1, v2, c)) {
-				a2.schemaTypeInfo = Fleur.Type_integer;
-				a2.data = "1";
-				return a2;
-			}
-			return null;
-		}
-		var result = new Fleur.Sequence();
-		a1.childNodes.forEach(function(d, i) {
-			var vd = Fleur.toJSValue(d, v2[0] < 4, true, true, true);
-			if (vd[0] === v2[0] && Fleur.eqOp(vd, v2, c)) {
-				var b = new Fleur.Text();
-				b.schemaTypeInfo = Fleur.Type_integer;
-				b.data = String(i + 1);
-				result.appendChild(b);
-			}
-		});
-		if (result.childNodes.length === 0) {
-			result = Fleur.EmptySequence;
-		} else if (result.childNodes.length === 1) {
-			result = result.childNodes[0];
-		}
-		return result;
-	},
-	null, [{type: Fleur.Node, occurence: "*"}, {type: Fleur.Node}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_integer, occurence: "*"});
-Fleur.XPathFunctions_fn["insert-before"] = function(ctx, children, callback) {
-	if (children.length !== 3) {
-		Fleur.callback(function() {callback(Fleur.error(ctx, "XPST0017"));});
-		return;
-	}
-	Fleur.XQueryEngine[children[0][0]](ctx, children[0][1], function(n) {
-		if (n.schemaTypeInfo === Fleur.Type_error) {
-			Fleur.callback(function() {callback(n);});
-			return;
-		}
-		var seq = n;
-		Fleur.XQueryEngine[children[1][0]](ctx, children[1][1], function(n) {
-			var index;
-			var a1 = Fleur.Atomize(n);
-			if (a1.schemaTypeInfo === Fleur.Type_error) {
-				Fleur.callback(function() {callback(a1);});
-				return;
-			}
-			if (a1.schemaTypeInfo !== Fleur.Type_integer) {
-				Fleur.callback(function() {callback(Fleur.error(ctx, "XPTY0004"));});
-				return;
-			}
-			index = Math.max(parseInt(a1.data, 10) - 1, 0);
-			Fleur.XQueryEngine[children[2][0]](ctx, children[2][1], function(n) {
-				var a2 = Fleur.Atomize(n);
-				if (a2 === Fleur.EmptySequence) {
-					Fleur.callback(function() {callback(seq);});
-					return;
-				}
-				if (seq === Fleur.EmptySequence) {
-					Fleur.callback(function() {callback(a2);});
-					return;
-				}
-				var result = new Fleur.Sequence();
-				if (seq.nodeType === Fleur.Node.SEQUENCE_NODE) {
-					var i = 0, l;
-					l = seq.childNodes.length;
-					index = Math.min(index, l);
-					while (i < index) {
-						result.appendChild(seq.childNodes[i]);
-						i++;
-					}
-					if (a2.nodeType === Fleur.Node.SEQUENCE_NODE) {
-						a2.childNodes.forEach(function(m) {result.appendChild(m);});
-					} else {
-						result.appendChild(a2);
-					}
-					while (i < l) {
-						result.appendChild(seq.childNodes[i]);
-						i++;
-					}
-				} else {
-					result = new Fleur.Sequence();
-					if (index !== 0) {
-						result.appendChild(seq);
-					}
-					if (a2.nodeType === Fleur.Node.SEQUENCE_NODE) {
-						a2.childNodes.forEach(function(m) {result.appendChild(m);});
-					} else {
-						result.appendChild(a2);
-					}
-					if (index === 0) {
-						result.appendChild(seq);
-					}
-				}
-				Fleur.callback(function() {callback(result);});
-			});
-		});
-	});
-};
- Fleur.signatures.fn_iri$_to$_uri_1 = {
+  function(arg) {
+    return arg === Fleur.EmptySequence || arg.nodeType !== Fleur.Node.SEQUENCE_NODE ? arg : arg.childNodes[0];
+  },
+  null, [{type: Fleur.Node, occurence: "*"}], false, false, {type: Fleur.Node});
+Fleur.signatures.fn_hours$_from$_dateTime_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_string},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_string, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_dateTime,
+      occurrence: "?"
+    }
+  ]
+};
+Fleur.XPathFunctions_fn["hours-from-dateTime#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:hours-from-dateTime",
+  function(arg) {
+    return arg !== null ? parseInt(arg.match(/^\d{4}-\d{2}-\d{2}T(\d{2}):\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})?$/)[1], 10) : null;
+  },
+  null, [{type: Fleur.Type_dateTime, occurence: "?"}], true, false, {type: Fleur.Type_integer, occurence: "?"});
+ Fleur.signatures.fn_hours$_from$_duration_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_duration,
+      occurrence: "?"
+    }
+  ]
+};
+Fleur.XPathFunctions_fn["hours-from-duration#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:hours-from-duration",
+  function(arg) {
+    var a = Fleur.Atomize(arg);
+    var d;
+    if (a === Fleur.EmptySequence) {
+      return null;
+    }
+    if (a.schemaTypeInfo === Fleur.Type_yearMonthDuration) {
+      return 0;
+    }
+    if (a.schemaTypeInfo === Fleur.Type_dayTimeDuration) {
+      d = Fleur.toJSONDayTimeDuration(a.data);
+      return d.sign * d.hour;
+    }
+    if (a.schemaTypeInfo === Fleur.Type_duration) {
+      d = Fleur.toJSONDuration(a.data);
+      return d.sign * d.hour;
+    }
+    var e = new Error("");
+    e.name = "XPTY0004";
+    return e;
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_integer, occurence: "?"});
+Fleur.signatures.fn_hours$_from$_time_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_time,
+      occurrence: "?"
+    }
+  ]
+};
+Fleur.XPathFunctions_fn["hours-from-time#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:hours-from-time",
+  function(arg) {
+    return arg !== null ? parseInt(arg.match(/^(\d{2}):\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})?$/)[1], 10) : null;
+  },
+  null, [{type: Fleur.Type_time, occurence: "?"}], true, false, {type: Fleur.Type_integer, occurence: "?"});
+Fleur.signatures.fn_id_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: null,
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "*"
+    }
+  ]
+};
+Fleur.XPathFunctions_fn["id#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:id",
+  function(arg, ctx) {
+    return Fleur.XPathFunctions_fn["id#2"].jsfunc(arg, ctx._curr);
+  },
+  null, [{type: Fleur.Type_string, occurence: "*"}], true, false, {type: Fleur.Node, occurence: "*"});
+Fleur.XPathFunctions_fn["id#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:id",
+  function(arg, node) {
+    if (!arg || !node || (!node.ownerDocument && node.nodeType !== Fleur.Node.DOCUMENT_NODE)) {
+      return null;
+    }
+    node = node.ownerDocument || node;
+    if (arg instanceof Array) {
+      var res = [];
+      arg.forEach(function(id) {
+        var elt = node.getElementById(id);
+        if (elt) {
+          res.push(elt);
+        }
+      });
+      return res.length === 0 ? null : res.length === 1 ? res[0] : node.sortNodes(res);
+    }
+    return node.getElementById(arg);
+  },
+  null, [{type: Fleur.Type_string, occurence: "*"}, {type: Fleur.Node}], false, false, {type: Fleur.Node, occurence: "*"});
+Fleur.signatures.fn_implicit$_timezone_0 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_dayTimeDuration,
+    occurrence: "?"
+  },
+  params_type: []
+};
+Fleur.XPathFunctions_fn["implicit-timezone#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:implicit-timezone",
+  function(ctx) {
+    var a = new Fleur.Text();
+    a.schemaTypeInfo = Fleur.Type_dayTimeDuration;
+    a.data = ctx.env.timezone;
+    return a;
+  },
+  null, [], true, false, {type: Fleur.Node, occurence: "?"});
+Fleur.signatures.fn_index$_of_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "*"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anyAtomicType,
+      occurrence: "*"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anyAtomicType,
+      occurrence: "1"
+    }
+  ]
+};
+Fleur.signatures.fn_index$_of_3 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "*"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anyAtomicType,
+      occurrence: "*"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anyAtomicType,
+      occurrence: "1"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    }
+  ]
+};
+Fleur.XPathFunctions_fn["index-of#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:index-of",
+  function(seq, search) {
+    return Fleur.XPathFunctions_fn["index-of#3"].jsfunc(seq, search, "http://www.w3.org/2005/xpath-functions/collation/codepoint");
+  },
+  null, [{type: Fleur.Node, occurence: "*"}, {type: Fleur.Node}], false, false, {type: Fleur.Type_integer, occurence: "*"});
+Fleur.XPathFunctions_fn["index-of#3"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:index-of",
+  function(seq, search, collation) {
+    var c = Fleur.getCollation(collation);
+    if (!c) {
+      var e = new Error("");
+      e.name = "FOCH0002";
+      return e;
+    }
+    var a1 = Fleur.Atomize(seq, true);
+    if (a1 === Fleur.EmptySequence || a1.schemaTypeInfo === Fleur.Type_error) {
+      return a1;
+    }
+    var a2 = Fleur.Atomize(search);
+    if (a2.schemaTypeInfo === Fleur.Type_error) {
+      return a2;
+    }
+    if (a2.nodeType === Fleur.Node.SEQUENCE_NODE) {
+      e = new Error("");
+      e.name = "XPTY0004";
+      return e;
+    }
+    var v2 = Fleur.toJSValue(a2, true, true, true, true);
+    if (a1.nodeType !== Fleur.Node.SEQUENCE_NODE) {
+      var v1 = Fleur.toJSValue(a1, v2[0] < 4, true, true, true);
+      if (v1[0] === v2[0] && Fleur.eqOp(v1, v2, c)) {
+        a2.schemaTypeInfo = Fleur.Type_integer;
+        a2.data = "1";
+        return a2;
+      }
+      return null;
+    }
+    var result = new Fleur.Sequence();
+    a1.childNodes.forEach(function(d, i) {
+      var vd = Fleur.toJSValue(d, v2[0] < 4, true, true, true);
+      if (vd[0] === v2[0] && Fleur.eqOp(vd, v2, c)) {
+        var b = new Fleur.Text();
+        b.schemaTypeInfo = Fleur.Type_integer;
+        b.data = String(i + 1);
+        result.appendChild(b);
+      }
+    });
+    if (result.childNodes.length === 0) {
+      result = Fleur.EmptySequence;
+    } else if (result.childNodes.length === 1) {
+      result = result.childNodes[0];
+    }
+    return result;
+  },
+  null, [{type: Fleur.Node, occurence: "*"}, {type: Fleur.Node}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_integer, occurence: "*"});
+Fleur.signatures.fn_insert$_before_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: null,
+  params_type: [
+    null,
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_integer,
+      occurrence: "1"
+    },
+    null
+  ]
+};
+Fleur.XPathFunctions_fn["insert-before"] = function(ctx, children, callback) {
+  if (children.length !== 3) {
+    Fleur.callback(function() {callback(Fleur.error(ctx, "XPST0017"));});
+    return;
+  }
+  Fleur.XQueryEngine[children[0][0]](ctx, children[0][1], function(n) {
+    if (n.schemaTypeInfo === Fleur.Type_error) {
+      Fleur.callback(function() {callback(n);});
+      return;
+    }
+    var seq = n;
+    Fleur.XQueryEngine[children[1][0]](ctx, children[1][1], function(n) {
+      var index;
+      var a1 = Fleur.Atomize(n);
+      if (a1.schemaTypeInfo === Fleur.Type_error) {
+        Fleur.callback(function() {callback(a1);});
+        return;
+      }
+      if (a1.schemaTypeInfo !== Fleur.Type_integer) {
+        Fleur.callback(function() {callback(Fleur.error(ctx, "XPTY0004"));});
+        return;
+      }
+      index = Math.max(parseInt(a1.data, 10) - 1, 0);
+      Fleur.XQueryEngine[children[2][0]](ctx, children[2][1], function(n) {
+        var a2 = Fleur.Atomize(n);
+        if (a2 === Fleur.EmptySequence) {
+          Fleur.callback(function() {callback(seq);});
+          return;
+        }
+        if (seq === Fleur.EmptySequence) {
+          Fleur.callback(function() {callback(a2);});
+          return;
+        }
+        var result = new Fleur.Sequence();
+        if (seq.nodeType === Fleur.Node.SEQUENCE_NODE) {
+          var i = 0, l;
+          l = seq.childNodes.length;
+          index = Math.min(index, l);
+          while (i < index) {
+            result.appendChild(seq.childNodes[i]);
+            i++;
+          }
+          if (a2.nodeType === Fleur.Node.SEQUENCE_NODE) {
+            a2.childNodes.forEach(function(m) {result.appendChild(m);});
+          } else {
+            result.appendChild(a2);
+          }
+          while (i < l) {
+            result.appendChild(seq.childNodes[i]);
+            i++;
+          }
+        } else {
+          result = new Fleur.Sequence();
+          if (index !== 0) {
+            result.appendChild(seq);
+          }
+          if (a2.nodeType === Fleur.Node.SEQUENCE_NODE) {
+            a2.childNodes.forEach(function(m) {result.appendChild(m);});
+          } else {
+            result.appendChild(a2);
+          }
+          if (index === 0) {
+            result.appendChild(seq);
+          }
+        }
+        Fleur.callback(function() {callback(result);});
+      });
+    });
+  });
+};
+Fleur.signatures.fn_iri$_to$_uri_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "1"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.fn_iri$_to$_uri_1 = function() {
   if (this.item.isNotEmpty()) {
     this.item.data = this.item.data.replace(/([^!-~]|[<>"{}|\\\^\`])/g, function(c) {
-			return encodeURIComponent(c);
-		});
+      return encodeURIComponent(c);
+    });
   } else {
-		this.item = new Fleur.Text();
-		this.item.data = "";
-	}
-	this.item.schemaTypeInfo = Fleur.Type_string;
+    this.item = new Fleur.Text();
+    this.item.data = "";
+  }
+  this.item.schemaTypeInfo = Fleur.Type_string;
   return this;
 };
 Fleur.XPathFunctions_fn["iri-to-uri#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:iri-to-uri",
-	function(iri) {
-		return iri !== null ? iri.replace(/([^!-~]|[<>"{}|\\\^\`])/g, function(c) {return encodeURIComponent(c);}) : "";
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_string});
+  function(iri) {
+    return iri !== null ? iri.replace(/([^!-~]|[<>"{}|\\\^\`])/g, function(c) {return encodeURIComponent(c);}) : "";
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_string});
 Fleur.signatures.fn_last_0 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_integer},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "1"
+  },
   params_type: []
 };
 Fleur.Context.prototype.fn_last_0 = function() {
   this.itemstack.push(this.item);
-	const item = new Fleur.Text();
-	item.data = String(this.last);
-	item.schemaTypeInfo = Fleur.Type_integer;
+  const item = new Fleur.Text();
+  item.data = String(this.last);
+  item.schemaTypeInfo = Fleur.Type_integer;
   this.item = item;
   return this;
 };
 Fleur.XPathFunctions_fn["last#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:last",
-	function(ctx) {
-		return ctx._last;
-	},
-	null, [], true, false, {type: Fleur.Type_integer});
+  function(ctx) {
+    return ctx._last;
+  },
+  null, [], true, false, {type: Fleur.Type_integer});
+ Fleur.signatures.fn_local$_name_0 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "?"
+  },
+  params_type: []
+};
+Fleur.signatures.fn_local$_name_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["local-name#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:local-name",
-	function(ctx) {
-		if (ctx._curr === Fleur.EmptySequence) {
-			return null;
-		}
-		if (ctx._curr.nodeType === Fleur.Node.DOCUMENT_NODE || ctx._curr.nodeType === Fleur.Node.COMMENT_NODE || ctx._curr.nodeType === Fleur.Node.TEXT_NODE) {
-			return "";
-		}
-		return ctx._curr.localName;
-	},
-	null, [], true, false, {type: Fleur.Type_string});
+  function(ctx) {
+    if (ctx._curr === Fleur.EmptySequence) {
+      return null;
+    }
+    if (ctx._curr.nodeType === Fleur.Node.DOCUMENT_NODE || ctx._curr.nodeType === Fleur.Node.COMMENT_NODE || ctx._curr.nodeType === Fleur.Node.TEXT_NODE) {
+      return "";
+    }
+    return ctx._curr.localName;
+  },
+  null, [], true, false, {type: Fleur.Type_string});
 Fleur.XPathFunctions_fn["local-name#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:local-name",
-	function(node) {
-		if (node === Fleur.EmptySequence) {
-			return null;
-		}
-		if (node.nodeType === Fleur.Node.DOCUMENT_NODE || node.nodeType === Fleur.Node.COMMENT_NODE || node.nodeType === Fleur.Node.TEXT_NODE) {
-			return "";
-		}
-		return node.localName;
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_string});
+  function(node) {
+    if (node === Fleur.EmptySequence) {
+      return null;
+    }
+    if (node.nodeType === Fleur.Node.DOCUMENT_NODE || node.nodeType === Fleur.Node.COMMENT_NODE || node.nodeType === Fleur.Node.TEXT_NODE) {
+      return "";
+    }
+    return node.localName;
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_string});
 Fleur.signatures.fn_lower$_case_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_string},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "1"
+  },
   params_type: [
-    {type: Fleur.Type_string, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.fn_lower$_case_1 = function() {
   if (this.item.isNotEmpty()) {
     this.item.data = this.item.data.toLowerCase();
   } else {
-		this.item = new Fleur.Text();
-		this.item.data = "";
-	}
-	this.item.schemaTypeInfo = Fleur.Type_string;
+    this.item = new Fleur.Text();
+    this.item.data = "";
+  }
+  this.item.schemaTypeInfo = Fleur.Type_string;
   return this;
 };
 Fleur.XPathFunctions_fn["lower-case#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:lower-case",
-	function(arg) {
-		return arg ? arg.toLowerCase() : "";
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_string});
+  function(arg) {
+    return arg ? arg.toLowerCase() : "";
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_string});
+Fleur.signatures.fn_matches_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_boolean,
+    occurrence: "1"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["matches#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:matches",
-	function(input, pattern) {
-		return Fleur.XPathFunctions_fn["matches#3"].jsfunc(input, pattern);
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_boolean});
+  function(input, pattern) {
+    return Fleur.XPathFunctions_fn["matches#3"].jsfunc(input, pattern);
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_boolean});
 Fleur.XPathFunctions_fn["matches#3"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:matches",
-	function(input, pattern, flags) {
-			input = input || "";
-			flags = flags || "";
-			try {
-				var re = new RegExp(pattern, flags);
-				return re.test(input);
-			} catch (e) {
-				return false;
-			}
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}, {type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_boolean});
+  function(input, pattern, flags) {
+      input = input || "";
+      flags = flags || "";
+      try {
+        var re = new RegExp(pattern, flags);
+        return re.test(input);
+      } catch (e) {
+        return false;
+      }
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}, {type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_boolean});
+Fleur.signatures.fn_max_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_anyAtomicType,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anyAtomicType,
+      occurrence: "*"
+    }
+  ]
+};
+Fleur.signatures.fn_max_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_anyAtomicType,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anyAtomicType,
+      occurrence: "*"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["max"] = function(ctx, children, callback) {
-	if (children.length !== 1) {
-		Fleur.callback(function() {callback(Fleur.error(ctx, "XPST0017"));});
-		return;
-	}
-	Fleur.XQueryEngine[children[0][0]](ctx, children[0][1], function(n) {
-		var max, val, t = 0, comp;
-		if (n === Fleur.EmptySequence || n.schemaTypeInfo === Fleur.Type_error) {
-			Fleur.callback(function() {callback(n);});
-			return;
-		}
-		if (n.nodeType !== Fleur.Node.SEQUENCE_NODE) {
-			Fleur.callback(function() {callback(Fleur.Atomize(n));});
-			return;
-		}
-		var items = n.childNodes, a;
-		var i, l;
-		i = 0;
-		l = items.length;
-		while (i < l) {
-			a = Fleur.Atomize(items[i]);
-			if (!comp) {
-				if (a.schemaTypeInfo === Fleur.Type_string || a.schemaTypeInfo === Fleur.Type_anyURI || a.schemaTypeInfo === Fleur.Type_untypedAtomic) {
-					comp = Fleur.Type_string;
-				} else if (a.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "string", Fleur.TypeInfo.DERIVATION_RESTRICTION) || a.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "anyURI", Fleur.TypeInfo.DERIVATION_RESTRICTION) || a.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "untypedAtomic", Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
-					comp = Fleur.Type_string;
-				} else {
-					comp = Fleur.Type_double;
-				}
-			}
-			if (comp === Fleur.Type_double) {
-				val = Fleur.toJSNumber(a);
-			} else {
-				val = Fleur.toJSString(a);
-			}
-			if (val[0] < 0) {
-				if (!comp) {
-					comp = Fleur.Type_string;
-					val = Fleur.toJSString(a);
-				} else {
-					Fleur.error("");
-				}
-			}
-			if (!max) {
-				t = val[0];
-				max = val[1];
-			} else {
-				if (comp === Fleur.Type_double) {
-					if (max < val[1]) {
-						t = val[0];
-						max = val[1];
-					}
-				} else if (max.localeCompare(val[1]) < 0) {
-					max = val[1];
-				}
-			}
-			i++;
-		}
-		a.data = "" + max;
-		a.schemaTypeInfo = comp === Fleur.Type_double ? Fleur.numericTypes[t] : Fleur.Type_string;
-		Fleur.callback(function() {callback(a);});
-	});
+  if (children.length !== 1) {
+    Fleur.callback(function() {callback(Fleur.error(ctx, "XPST0017"));});
+    return;
+  }
+  Fleur.XQueryEngine[children[0][0]](ctx, children[0][1], function(n) {
+    var max, val, t = 0, comp;
+    if (n === Fleur.EmptySequence || n.schemaTypeInfo === Fleur.Type_error) {
+      Fleur.callback(function() {callback(n);});
+      return;
+    }
+    if (n.nodeType !== Fleur.Node.SEQUENCE_NODE) {
+      Fleur.callback(function() {callback(Fleur.Atomize(n));});
+      return;
+    }
+    var items = n.childNodes, a;
+    var i, l;
+    i = 0;
+    l = items.length;
+    while (i < l) {
+      a = Fleur.Atomize(items[i]);
+      if (!comp) {
+        if (a.schemaTypeInfo === Fleur.Type_string || a.schemaTypeInfo === Fleur.Type_anyURI || a.schemaTypeInfo === Fleur.Type_untypedAtomic) {
+          comp = Fleur.Type_string;
+        } else if (a.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "string", Fleur.TypeInfo.DERIVATION_RESTRICTION) || a.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "anyURI", Fleur.TypeInfo.DERIVATION_RESTRICTION) || a.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "untypedAtomic", Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
+          comp = Fleur.Type_string;
+        } else {
+          comp = Fleur.Type_double;
+        }
+      }
+      if (comp === Fleur.Type_double) {
+        val = Fleur.toJSNumber(a);
+      } else {
+        val = Fleur.toJSString(a);
+      }
+      if (val[0] < 0) {
+        if (!comp) {
+          comp = Fleur.Type_string;
+          val = Fleur.toJSString(a);
+        } else {
+          Fleur.error("");
+        }
+      }
+      if (!max) {
+        t = val[0];
+        max = val[1];
+      } else {
+        if (comp === Fleur.Type_double) {
+          if (max < val[1]) {
+            t = val[0];
+            max = val[1];
+          }
+        } else if (max.localeCompare(val[1]) < 0) {
+          max = val[1];
+        }
+      }
+      i++;
+    }
+    a.data = "" + max;
+    a.schemaTypeInfo = comp === Fleur.Type_double ? Fleur.numericTypes[t] : Fleur.Type_string;
+    Fleur.callback(function() {callback(a);});
+  });
+};
+Fleur.signatures.fn_min_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_anyAtomicType,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anyAtomicType,
+      occurrence: "*"
+    }
+  ]
+};
+Fleur.signatures.fn_min_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_anyAtomicType,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anyAtomicType,
+      occurrence: "*"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    }
+  ]
 };
 Fleur.XPathFunctions_fn["min"] = function(ctx, children, callback) {
-	if (children.length !== 1) {
-		Fleur.callback(function() {callback(Fleur.error(ctx, "XPST0017"));});
-		return;
-	}
-	Fleur.XQueryEngine[children[0][0]](ctx, children[0][1], function(n) {
-		var min, val, t = 0, comp;
-		if (n === Fleur.EmptySequence || n.schemaTypeInfo === Fleur.Type_error) {
-			Fleur.callback(function() {callback(n);});
-			return;
-		}
-		if (n.nodeType !== Fleur.Node.SEQUENCE_NODE) {
-			Fleur.callback(function() {callback(Fleur.Atomize(n));});
-			return;
-		} else {
-			var items = n.childNodes;
-			var i, l, a;
-			i = 0;
-			l = items.length;
-			while (i < l) {
-				a = Fleur.Atomize(items[i]);
-				if (!comp) {
-					if (a.schemaTypeInfo === Fleur.Type_string || a.schemaTypeInfo === Fleur.Type_anyURI || a.schemaTypeInfo === Fleur.Type_untypedAtomic) {
-						comp = Fleur.Type_string;
-					} else if (a.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "string", Fleur.TypeInfo.DERIVATION_RESTRICTION) || a.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "anyURI", Fleur.TypeInfo.DERIVATION_RESTRICTION) || a.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "untypedAtomic", Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
-						comp = Fleur.Type_string;
-					} else {
-						comp = Fleur.Type_double;
-					}
-				}
-				if (comp === Fleur.Type_double) {
-					val = Fleur.toJSNumber(a);
-				} else {
-					val = Fleur.toJSString(a);
-				}
-				if (val[0] < 0) {
-					if (!comp) {
-						comp = Fleur.Type_string;
-						val = Fleur.toJSString(a);
-					} else {
-						Fleur.error("");
-					}
-				}
-				if (!min) {
-					t = val[0];
-					min = val[1];
-				} else {
-					if (comp === Fleur.Type_double) {
-						if (min > val[1]) {
-							t = val[0];
-							min = val[1];
-						}
-					} else if (min.localeCompare(val[1]) > 0) {
-						min = val[1];
-					}
-				}
-				i++;
-			}
-		}
-		a.data = "" + min;
-		a.schemaTypeInfo = comp === Fleur.Type_double ? Fleur.numericTypes[t] : Fleur.Type_string;
-		Fleur.callback(function() {callback(a);});
-	});
+  if (children.length !== 1) {
+    Fleur.callback(function() {callback(Fleur.error(ctx, "XPST0017"));});
+    return;
+  }
+  Fleur.XQueryEngine[children[0][0]](ctx, children[0][1], function(n) {
+    var min, val, t = 0, comp;
+    if (n === Fleur.EmptySequence || n.schemaTypeInfo === Fleur.Type_error) {
+      Fleur.callback(function() {callback(n);});
+      return;
+    }
+    if (n.nodeType !== Fleur.Node.SEQUENCE_NODE) {
+      Fleur.callback(function() {callback(Fleur.Atomize(n));});
+      return;
+    } else {
+      var items = n.childNodes;
+      var i, l, a;
+      i = 0;
+      l = items.length;
+      while (i < l) {
+        a = Fleur.Atomize(items[i]);
+        if (!comp) {
+          if (a.schemaTypeInfo === Fleur.Type_string || a.schemaTypeInfo === Fleur.Type_anyURI || a.schemaTypeInfo === Fleur.Type_untypedAtomic) {
+            comp = Fleur.Type_string;
+          } else if (a.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "string", Fleur.TypeInfo.DERIVATION_RESTRICTION) || a.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "anyURI", Fleur.TypeInfo.DERIVATION_RESTRICTION) || a.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "untypedAtomic", Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
+            comp = Fleur.Type_string;
+          } else {
+            comp = Fleur.Type_double;
+          }
+        }
+        if (comp === Fleur.Type_double) {
+          val = Fleur.toJSNumber(a);
+        } else {
+          val = Fleur.toJSString(a);
+        }
+        if (val[0] < 0) {
+          if (!comp) {
+            comp = Fleur.Type_string;
+            val = Fleur.toJSString(a);
+          } else {
+            Fleur.error("");
+          }
+        }
+        if (!min) {
+          t = val[0];
+          min = val[1];
+        } else {
+          if (comp === Fleur.Type_double) {
+            if (min > val[1]) {
+              t = val[0];
+              min = val[1];
+            }
+          } else if (min.localeCompare(val[1]) > 0) {
+            min = val[1];
+          }
+        }
+        i++;
+      }
+    }
+    a.data = "" + min;
+    a.schemaTypeInfo = comp === Fleur.Type_double ? Fleur.numericTypes[t] : Fleur.Type_string;
+    Fleur.callback(function() {callback(a);});
+  });
+};
+Fleur.signatures.fn_minutes$_from$_dateTime_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_dateTime,
+      occurrence: "?"
+    }
+  ]
 };
 Fleur.XPathFunctions_fn["minutes-from-dateTime#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:minutes-from-dateTime",
-	function(arg) {
-		return arg !== null ? parseInt(arg.match(/^\d{4}-\d{2}-\d{2}T\d{2}:(\d{2}):\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})?$/)[1], 10) : null;
-	},
-	null, [{type: Fleur.Type_dateTime, occurence: "?"}], true, false, {type: Fleur.Type_integer, occurence: "?"});
+  function(arg) {
+    return arg !== null ? parseInt(arg.match(/^\d{4}-\d{2}-\d{2}T\d{2}:(\d{2}):\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})?$/)[1], 10) : null;
+  },
+  null, [{type: Fleur.Type_dateTime, occurence: "?"}], true, false, {type: Fleur.Type_integer, occurence: "?"});
+Fleur.signatures.fn_minutes$_from$_duration_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_duration,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["minutes-from-duration#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:minutes-from-duration",
-	function(arg) {
-		var a = Fleur.Atomize(arg);
-		var d;
-		if (a === Fleur.EmptySequence) {
-			return null;
-		}
-		if (a.schemaTypeInfo === Fleur.Type_yearMonthDuration) {
-			return 0;
-		}
-		if (a.schemaTypeInfo === Fleur.Type_dayTimeDuration) {
-			d = Fleur.toJSONDayTimeDuration(a.data);
-			return d.sign * d.minute;
-		}
-		if (a.schemaTypeInfo === Fleur.Type_duration) {
-			d = Fleur.toJSONDuration(a.data);
-			return d.sign * d.minute;
-		}
-		var e = new Error("");
-		e.name = "XPTY0004";
-		return e;
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_integer, occurence: "?"});
+  function(arg) {
+    var a = Fleur.Atomize(arg);
+    var d;
+    if (a === Fleur.EmptySequence) {
+      return null;
+    }
+    if (a.schemaTypeInfo === Fleur.Type_yearMonthDuration) {
+      return 0;
+    }
+    if (a.schemaTypeInfo === Fleur.Type_dayTimeDuration) {
+      d = Fleur.toJSONDayTimeDuration(a.data);
+      return d.sign * d.minute;
+    }
+    if (a.schemaTypeInfo === Fleur.Type_duration) {
+      d = Fleur.toJSONDuration(a.data);
+      return d.sign * d.minute;
+    }
+    var e = new Error("");
+    e.name = "XPTY0004";
+    return e;
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_integer, occurence: "?"});
+Fleur.signatures.fn_minutes$_from$_time_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_time,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["minutes-from-time#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:minutes-from-time",
-	function(arg) {
-		return arg !== null ? parseInt(arg.match(/^\d{2}:(\d{2}):\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})?$/)[1], 10) : null;
-	},
-	null, [{type: Fleur.Type_time, occurence: "?"}], true, false, {type: Fleur.Type_integer, occurence: "?"});
+  function(arg) {
+    return arg !== null ? parseInt(arg.match(/^\d{2}:(\d{2}):\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})?$/)[1], 10) : null;
+  },
+  null, [{type: Fleur.Type_time, occurence: "?"}], true, false, {type: Fleur.Type_integer, occurence: "?"});
+Fleur.signatures.fn_month$_from$_date_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_date,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["month-from-date#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:month-from-date",
-	function(arg) {
-		return arg !== null ? parseInt(arg.match(/^\d{4}-(\d{2})-\d{2}(?:Z|[+\-]\d{2}:\d{2})?$/)[1], 10) : null;
-	},
-	null, [{type: Fleur.Type_date, occurence: "?"}], true, false, {type: Fleur.Type_integer, occurence: "?"});
+  function(arg) {
+    return arg !== null ? parseInt(arg.match(/^\d{4}-(\d{2})-\d{2}(?:Z|[+\-]\d{2}:\d{2})?$/)[1], 10) : null;
+  },
+  null, [{type: Fleur.Type_date, occurence: "?"}], true, false, {type: Fleur.Type_integer, occurence: "?"});
+Fleur.signatures.fn_month$_from$_dateTime_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_dateTime,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["month-from-dateTime#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:month-from-dateTime",
-	function(arg) {
-		return arg !== null ? parseInt(arg.match(/^\d{4}-(\d{2})-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})?$/)[1], 10) : null;
-	},
-	null, [{type: Fleur.Type_dateTime, occurence: "?"}], true, false, {type: Fleur.Type_integer, occurence: "?"});
+  function(arg) {
+    return arg !== null ? parseInt(arg.match(/^\d{4}-(\d{2})-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+\-]\d{2}:\d{2})?$/)[1], 10) : null;
+  },
+  null, [{type: Fleur.Type_dateTime, occurence: "?"}], true, false, {type: Fleur.Type_integer, occurence: "?"});
+Fleur.signatures.fn_month$_from$_duration_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_duration,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["months-from-duration#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:months-from-duration",
-	function(arg) {
-		var a = Fleur.Atomize(arg);
-		var d;
-		if (a === Fleur.EmptySequence) {
-			return null;
-		}
-		if (a.schemaTypeInfo === Fleur.Type_dayTimeDuration) {
-			return 0;
-		}
-		if (a.schemaTypeInfo === Fleur.Type_yearMonthDuration) {
-			d = Fleur.toJSONYearMonthDuration(a.data);
-			return d.sign * d.month;
-		}
-		if (a.schemaTypeInfo === Fleur.Type_duration) {
-			d = Fleur.toJSONDuration(a.data);
-			return d.sign * d.month;
-		}
-		var e = new Error("");
-		e.name = "XPTY0004";
-		return e;
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_integer, occurence: "?"});
+  function(arg) {
+    var a = Fleur.Atomize(arg);
+    var d;
+    if (a === Fleur.EmptySequence) {
+      return null;
+    }
+    if (a.schemaTypeInfo === Fleur.Type_dayTimeDuration) {
+      return 0;
+    }
+    if (a.schemaTypeInfo === Fleur.Type_yearMonthDuration) {
+      d = Fleur.toJSONYearMonthDuration(a.data);
+      return d.sign * d.month;
+    }
+    if (a.schemaTypeInfo === Fleur.Type_duration) {
+      d = Fleur.toJSONDuration(a.data);
+      return d.sign * d.month;
+    }
+    var e = new Error("");
+    e.name = "XPTY0004";
+    return e;
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_integer, occurence: "?"});
+Fleur.signatures.fn_name_0 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "?"
+  },
+  params_type: []
+};
+Fleur.signatures.fn_name_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["name#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:name",
-	function(ctx) {
-		if (ctx._curr === null) {
-			return null;
-		}
-		if (ctx._curr.nodeType === Fleur.Node.DOCUMENT_NODE || ctx._curr.nodeType === Fleur.Node.COMMENT_NODE || ctx._curr.nodeType === Fleur.Node.TEXT_NODE) {
-			return "";
-		}
-		return ctx._curr.nodeName;
-	},
-	null, [], true, false, {type: Fleur.Type_string});
+  function(ctx) {
+    if (ctx._curr === null) {
+      return null;
+    }
+    if (ctx._curr.nodeType === Fleur.Node.DOCUMENT_NODE || ctx._curr.nodeType === Fleur.Node.COMMENT_NODE || ctx._curr.nodeType === Fleur.Node.TEXT_NODE) {
+      return "";
+    }
+    return ctx._curr.nodeName;
+  },
+  null, [], true, false, {type: Fleur.Type_string});
 Fleur.XPathFunctions_fn["name#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:name",
-	function(node) {
-		if (node === null) {
-			return null;
-		}
-		if (node.nodeType === Fleur.Node.DOCUMENT_NODE || node.nodeType === Fleur.Node.COMMENT_NODE || node.nodeType === Fleur.Node.TEXT_NODE) {
-			return "";
-		}
-		return node.nodeName;
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_string});
+  function(node) {
+    if (node === null) {
+      return null;
+    }
+    if (node.nodeType === Fleur.Node.DOCUMENT_NODE || node.nodeType === Fleur.Node.COMMENT_NODE || node.nodeType === Fleur.Node.TEXT_NODE) {
+      return "";
+    }
+    return node.nodeName;
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_string});
+Fleur.signatures.fn_namespace$_uri_0 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_anyURI,
+    occurrence: "?"
+  },
+  params_type: []
+};
+Fleur.signatures.fn_namespace$_uri_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_anyURI,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["namespace-uri#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:namespace-uri",
-	function(ctx) {
-		if (ctx._curr === null) {
-			return null;
-		}
-		if (ctx._curr.nodeType === Fleur.Node.DOCUMENT_NODE || ctx._curr.nodeType === Fleur.Node.COMMENT_NODE || ctx._curr.nodeType === Fleur.Node.TEXT_NODE) {
-			return "";
-		}
-		return ctx._curr.namespaceURI;
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], true, false, {type: Fleur.Type_anyURI});
+  function(ctx) {
+    if (ctx._curr === null) {
+      return null;
+    }
+    if (ctx._curr.nodeType === Fleur.Node.DOCUMENT_NODE || ctx._curr.nodeType === Fleur.Node.COMMENT_NODE || ctx._curr.nodeType === Fleur.Node.TEXT_NODE) {
+      return "";
+    }
+    return ctx._curr.namespaceURI;
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], true, false, {type: Fleur.Type_anyURI});
 Fleur.XPathFunctions_fn["namespace-uri#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:namespace-uri",
-	function(node) {
-		if (node === null) {
-			return null;
-		}
-		if (node.nodeType === Fleur.Node.DOCUMENT_NODE || node.nodeType === Fleur.Node.COMMENT_NODE || node.nodeType === Fleur.Node.TEXT_NODE) {
-			return "";
-		}
-		return node.namespaceURI;
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_anyURI});
+  function(node) {
+    if (node === null) {
+      return null;
+    }
+    if (node.nodeType === Fleur.Node.DOCUMENT_NODE || node.nodeType === Fleur.Node.COMMENT_NODE || node.nodeType === Fleur.Node.TEXT_NODE) {
+      return "";
+    }
+    return node.namespaceURI;
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_anyURI});
+Fleur.signatures.fn_nilled_0 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_boolean,
+    occurrence: "1"
+  },
+  params_type: []
+};
+Fleur.signatures.fn_nilled_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_boolean,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      occurrence: "1"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["nilled#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:nilled",
-	function(ctx) {
-		return Fleur.XPathFunctions_fn["nilled#1"].jsfunc(ctx._curr);
-	},
-	null, [], true, false, {type: Fleur.Type_boolean});
+  function(ctx) {
+    return Fleur.XPathFunctions_fn["nilled#1"].jsfunc(ctx._curr);
+  },
+  null, [], true, false, {type: Fleur.Type_boolean});
 Fleur.XPathFunctions_fn["nilled#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:nilled",
-	function(node) {
-		if (node === Fleur.EmptySequence) {
-			return null;
-		}
-		if ((node.nodeType === Fleur.Node.TEXT_NODE && node.schemaTypeInfo !== Fleur.Type_untypedAtomic) || node.nodeType === Fleur.Node.FUNCTION_NODE) {
-			var e = new Error("");
-			e.name = "XPTY0004";
-			return e;
-		}
-		return false;
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_boolean});
+  function(node) {
+    if (node === Fleur.EmptySequence) {
+      return null;
+    }
+    if ((node.nodeType === Fleur.Node.TEXT_NODE && node.schemaTypeInfo !== Fleur.Type_untypedAtomic) || node.nodeType === Fleur.Node.FUNCTION_NODE) {
+      var e = new Error("");
+      e.name = "XPTY0004";
+      return e;
+    }
+    return false;
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_boolean});
+Fleur.signatures.fn_node$_name_0 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "?"
+  },
+  params_type: []
+};
+Fleur.signatures.fn_node$_name_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["node-name#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:node-name",
-	function(ctx) {
-		if (ctx._curr === Fleur.EmptySequence) {
-			return null;
-		}
-		if (ctx._curr.nodeType === Fleur.Node.DOCUMENT_NODE || ctx._curr.nodeType === Fleur.Node.COMMENT_NODE || ctx._curr.nodeType === Fleur.Node.TEXT_NODE) {
-			return "";
-		}
-		return ctx._curr.nodeName;
-	},
-	null, [], true, false, {type: Fleur.Type_string});
+  function(ctx) {
+    if (ctx._curr === Fleur.EmptySequence) {
+      return null;
+    }
+    if (ctx._curr.nodeType === Fleur.Node.DOCUMENT_NODE || ctx._curr.nodeType === Fleur.Node.COMMENT_NODE || ctx._curr.nodeType === Fleur.Node.TEXT_NODE) {
+      return "";
+    }
+    return ctx._curr.nodeName;
+  },
+  null, [], true, false, {type: Fleur.Type_string});
 Fleur.XPathFunctions_fn["node-name#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:node-name",
-	function(node) {
-		if (node === Fleur.EmptySequence) {
-			return null;
-		}
-		if (node.nodeType === Fleur.Node.DOCUMENT_NODE || node.nodeType === Fleur.Node.COMMENT_NODE || node.nodeType === Fleur.Node.TEXT_NODE) {
-			return "";
-		}
-		return node.nodeName;
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_string});
+  function(node) {
+    if (node === Fleur.EmptySequence) {
+      return null;
+    }
+    if (node.nodeType === Fleur.Node.DOCUMENT_NODE || node.nodeType === Fleur.Node.COMMENT_NODE || node.nodeType === Fleur.Node.TEXT_NODE) {
+      return "";
+    }
+    return node.nodeName;
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_string});
+Fleur.signatures.fn_normalize$_empty_0 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "1"
+  },
+  params_type: []
+};
+Fleur.signatures.fn_normalize$_empty_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "1"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["normalize-empty#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:normalize-empty",
-	function(ctx) {
-		return ctx._curr && ctx._curr.textContent !== "" ? ctx._curr.textContent : null;
-	},
-	null, [], true, false, {type: Fleur.Type_string});
+  function(ctx) {
+    return ctx._curr && ctx._curr.textContent !== "" ? ctx._curr.textContent : null;
+  },
+  null, [], true, false, {type: Fleur.Type_string});
 Fleur.XPathFunctions_fn["normalize-empty#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:normalize-empty",
-	function(arg) {
-		return arg && arg !== "" ? arg : null;
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_string});
+  function(arg) {
+    return arg && arg !== "" ? arg : null;
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_string});
+Fleur.signatures.fn_normalize$_space_0 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "1"
+  },
+  params_type: []
+};
 Fleur.signatures.fn_normalize$_space_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_string},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "1"
+  },
   params_type: [
-    {type: Fleur.Type_string, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.fn_normalize$_space_1 = function() {
   if (this.item.isNotEmpty()) {
     this.item.data = this.item.data.trim().replace(/\s+/g, " ");
   } else {
-		this.item = new Fleur.Text();
-		this.item.data = "";
-	}
-	this.item.schemaTypeInfo = Fleur.Type_string;
+    this.item = new Fleur.Text();
+    this.item.data = "";
+  }
+  this.item.schemaTypeInfo = Fleur.Type_string;
   return this;
 };
 Fleur.XPathFunctions_fn["normalize-space#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:normalize-space",
-	function(ctx) {
-		return ctx._curr ? ctx._curr.textContent.replace(/^\s+|\s+$/g, "").replace(/\s+/g, " ") : "";
-	},
-	null, [], true, false, {type: Fleur.Type_string});
+  function(ctx) {
+    return ctx._curr ? ctx._curr.textContent.replace(/^\s+|\s+$/g, "").replace(/\s+/g, " ") : "";
+  },
+  null, [], true, false, {type: Fleur.Type_string});
 Fleur.XPathFunctions_fn["normalize-space#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:normalize-space",
-	function(arg) {
-		return arg ? arg.replace(/^\s+|\s+$/g, "").replace(/\s+/g, " ") : "";
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_string});
+  function(arg) {
+    return arg ? arg.replace(/^\s+|\s+$/g, "").replace(/\s+/g, " ") : "";
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_string});
+Fleur.signatures.fn_normalize$_unicode_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "1"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
+  ]
+};
+Fleur.signatures.fn_normalize$_unicode_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "1"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["normalize-unicode#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:normalize-unicode",
-	function(arg) {
-		if (!arg) {
-			return "";
-		}
-		return arg.normalize();
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_string});
+  function(arg) {
+    if (!arg) {
+      return "";
+    }
+    return arg.normalize();
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_string});
 Fleur.XPathFunctions_fn["normalize-unicode#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:normalize-unicode",
-	function(arg, normalizationForm) {
-		if (!arg) {
-			return "";
-		}
-		normalizationForm = normalizationForm.toUpperCase().trim();
-		if (normalizationForm === "") {
-			return arg;
-		}
-		try {
-			return arg.normalize(normalizationForm);
-		} catch(e) {
-			return arg;
-		}
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_string});
+  function(arg, normalizationForm) {
+    if (!arg) {
+      return "";
+    }
+    normalizationForm = normalizationForm.toUpperCase().trim();
+    if (normalizationForm === "") {
+      return arg;
+    }
+    try {
+      return arg.normalize(normalizationForm);
+    } catch(e) {
+      return arg;
+    }
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_string});
 Fleur.signatures.fn_not_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_boolean},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_boolean,
+    occurrence: "1"
+  },
   params_type: [
-    Fleur.Node
+    null
   ]
 };
 Fleur.Context.prototype.fn_not_1 = function() {
-	const newitem = new Fleur.Text();
-	newitem.schemaTypeInfo = Fleur.Type_boolean;
+  const newitem = new Fleur.Text();
+  newitem.schemaTypeInfo = Fleur.Type_boolean;
   if (this.item.isEmpty()) {
     newitem.appendData("true");
     this.item = newitem;
@@ -9419,432 +10547,726 @@ Fleur.Context.prototype.fn_not_1 = function() {
   return this;
 };
 Fleur.XPathFunctions_fn["not#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:not",
-	function(arg, ctx) {
-		var e;
-		if (arg === Fleur.EmptySequence) {
-			return true;
-		}
-		if (arg.nodeType === Fleur.Node.SEQUENCE_NODE) {
-			if (arg.childNodes.length === 0) {
-				return true;
-			}
-			if (arg.childNodes[0].nodeType !== Fleur.Node.TEXT_NODE || arg.childNodes[0].ownerDocument) {
-				return false;
-			}
-			e = new Error("The supplied sequence contains values inappropriate to fn:boolean");
-			e.name = "FORG0006";
-			return e;
-		}
-		if (arg.nodeType !== Fleur.Node.TEXT_NODE) {
-			return false;
-		}
-		if (arg.schemaTypeInfo === Fleur.Type_boolean) {
-			return arg.data !== "true";
-		}
-		if (arg.schemaTypeInfo === Fleur.Type_string || arg.schemaTypeInfo === Fleur.Type_untypedAtomic || arg.schemaTypeInfo === Fleur.Type_anyURI) {
-			return !(arg.hasOwnProperty("data") && arg.data.length !== 0);
-		}
-		if (arg.schemaTypeInfo === Fleur.Type_integer || arg.schemaTypeInfo === Fleur.Type_decimal || arg.schemaTypeInfo === Fleur.Type_float || arg.schemaTypeInfo === Fleur.Type_double) {
-			return !(arg.data !== "0" && arg.data !== "0.0" && arg.data !== "0.0e0" && arg.data !== "NaN");
-		}
-		if (arg.schemaTypeInfo && arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "boolean", Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
-			return arg.data !== "true";
-		}
-		if (arg.schemaTypeInfo && (arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "string", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "untypedAtomic", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "anyURI", Fleur.TypeInfo.DERIVATION_RESTRICTION))) {
-			return !(arg.hasOwnProperty("data") && arg.data.length !== 0);
-		}
-		if (arg.schemaTypeInfo && (arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "integer", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "decimal", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "float", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "double", Fleur.TypeInfo.DERIVATION_RESTRICTION))) {
-			return !(arg.data !== "0" && arg.data !== "0.0" && arg.data !== "0.0e0" && arg.data !== "NaN");
-		}
-		e = new Error("The supplied sequence contains values inappropriate to fn:boolean");
-		e.name = "FORG0006";
-		return e;
-	},
-	null, [{type: Fleur.Node, occurence: "*"}], true, false, {type: Fleur.Type_boolean});
+  function(arg, ctx) {
+    var e;
+    if (arg === Fleur.EmptySequence) {
+      return true;
+    }
+    if (arg.nodeType === Fleur.Node.SEQUENCE_NODE) {
+      if (arg.childNodes.length === 0) {
+        return true;
+      }
+      if (arg.childNodes[0].nodeType !== Fleur.Node.TEXT_NODE || arg.childNodes[0].ownerDocument) {
+        return false;
+      }
+      e = new Error("The supplied sequence contains values inappropriate to fn:boolean");
+      e.name = "FORG0006";
+      return e;
+    }
+    if (arg.nodeType !== Fleur.Node.TEXT_NODE) {
+      return false;
+    }
+    if (arg.schemaTypeInfo === Fleur.Type_boolean) {
+      return arg.data !== "true";
+    }
+    if (arg.schemaTypeInfo === Fleur.Type_string || arg.schemaTypeInfo === Fleur.Type_untypedAtomic || arg.schemaTypeInfo === Fleur.Type_anyURI) {
+      return !(arg.hasOwnProperty("data") && arg.data.length !== 0);
+    }
+    if (arg.schemaTypeInfo === Fleur.Type_integer || arg.schemaTypeInfo === Fleur.Type_decimal || arg.schemaTypeInfo === Fleur.Type_float || arg.schemaTypeInfo === Fleur.Type_double) {
+      return !(arg.data !== "0" && arg.data !== "0.0" && arg.data !== "0.0e0" && arg.data !== "NaN");
+    }
+    if (arg.schemaTypeInfo && arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "boolean", Fleur.TypeInfo.DERIVATION_RESTRICTION)) {
+      return arg.data !== "true";
+    }
+    if (arg.schemaTypeInfo && (arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "string", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "untypedAtomic", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "anyURI", Fleur.TypeInfo.DERIVATION_RESTRICTION))) {
+      return !(arg.hasOwnProperty("data") && arg.data.length !== 0);
+    }
+    if (arg.schemaTypeInfo && (arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "integer", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "decimal", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "float", Fleur.TypeInfo.DERIVATION_RESTRICTION) || arg.schemaTypeInfo.isDerivedFrom("http://www.w3.org/2001/XMLSchema", "double", Fleur.TypeInfo.DERIVATION_RESTRICTION))) {
+      return !(arg.data !== "0" && arg.data !== "0.0" && arg.data !== "0.0e0" && arg.data !== "NaN");
+    }
+    e = new Error("The supplied sequence contains values inappropriate to fn:boolean");
+    e.name = "FORG0006";
+    return e;
+  },
+  null, [{type: Fleur.Node, occurence: "*"}], true, false, {type: Fleur.Type_boolean});
  Fleur.signatures.fn_number_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "1"
+  },
   params_type: [
-    {type: Fleur.atomicTypes, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anyAtomicType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.fn_number_1 = function() {
   if (this.item.isNotEmpty()) {
-		try {
-	    this.item.data = Fleur.Type_double.canonicalize(this.item.data);
-		} catch {
-			this.item.data = "NaN";
-		}
+    try {
+      this.item.data = Fleur.Type_double.canonicalize(this.item.data);
+    } catch {
+      this.item.data = "NaN";
+    }
   } else {
-		this.item = new Fleur.Text();
-		this.item.data = "NaN";
-	}
-	this.item.schemaTypeInfo = Fleur.Type_double;
+    this.item = new Fleur.Text();
+    this.item.data = "NaN";
+  }
+  this.item.schemaTypeInfo = Fleur.Type_double;
   return this;
 };
 Fleur.XPathFunctions_fn["number#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:number",
-	function(ctx) {
-		return Fleur.XPathFunctions_fn["number#1"].jsfunc(ctx._curr);
-	},
-	null, [], true, false, {type: Fleur.Type_double});
+  function(ctx) {
+    return Fleur.XPathFunctions_fn["number#1"].jsfunc(ctx._curr);
+  },
+  null, [], true, false, {type: Fleur.Type_double});
 Fleur.XPathFunctions_fn["number#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:number",
-	function(arg) {
-		var a = Fleur.Atomize(arg);
-		if (a.schemaTypeInfo === Fleur.Type_error) {
-			return a;
-		}
-		if (a === Fleur.EmptySequence || a.data === "NaN") {
-			return NaN;
-		}
-		if (a.schemaTypeInfo === Fleur.Type_boolean) {
-			return a.data === "true" ? 1.0e0 : 0.0e0;
-		}
-		if (!(a.schemaTypeInfo !== Fleur.Type_anyURI && /^\s*(([\-+]?([0-9]+(\.[0-9]*)?)|(\.[0-9]+))([eE][-+]?[0-9]+)?|-?INF|NaN)\s*$/.test(a.data))) {
-			return NaN;
-		}
-		if (a.data === "INF") {
-			return Number.POSITIVE_INFINITY
-		}
-		if (a.data === "-INF") {
-			return Number.NEGATIVE_INFINITY
-		}
-		return parseFloat(a.data);
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_double});
+  function(arg) {
+    var a = Fleur.Atomize(arg);
+    if (a.schemaTypeInfo === Fleur.Type_error) {
+      return a;
+    }
+    if (a === Fleur.EmptySequence || a.data === "NaN") {
+      return NaN;
+    }
+    if (a.schemaTypeInfo === Fleur.Type_boolean) {
+      return a.data === "true" ? 1.0e0 : 0.0e0;
+    }
+    if (!(a.schemaTypeInfo !== Fleur.Type_anyURI && /^\s*(([\-+]?([0-9]+(\.[0-9]*)?)|(\.[0-9]+))([eE][-+]?[0-9]+)?|-?INF|NaN)\s*$/.test(a.data))) {
+      return NaN;
+    }
+    if (a.data === "INF") {
+      return Number.POSITIVE_INFINITY
+    }
+    if (a.data === "-INF") {
+      return Number.NEGATIVE_INFINITY
+    }
+    return parseFloat(a.data);
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_double});
+ Fleur.signatures.fn_one$_or$_more_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    occurrence: "+"
+  },
+  params_type: [null]
+};
 Fleur.XPathFunctions_fn["one-or-more#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:one-or-more",
-	function(arg, ctx) {
-		if (arg === Fleur.EmptySequence) {
-			return Fleur.error(ctx, "FORG0004");
-		}
-		if (arg.nodeType === Fleur.Node.SEQUENCE_NODE) {
-			var result = arg;
-			arg.childNodes.forEach(function(c) {
-				if (c.schemaTypeInfo === Fleur.Type_error && result === arg) {
-					result = c;
-				}
-			});
-			return result;
-		} else {
-			return arg;
-		}
-	},
-	null, [{type: Fleur.Node, occurence: "*"}], true, false, {type: Fleur.Node});
+  function(arg, ctx) {
+    if (arg === Fleur.EmptySequence) {
+      return Fleur.error(ctx, "FORG0004");
+    }
+    if (arg.nodeType === Fleur.Node.SEQUENCE_NODE) {
+      var result = arg;
+      arg.childNodes.forEach(function(c) {
+        if (c.schemaTypeInfo === Fleur.Type_error && result === arg) {
+          result = c;
+        }
+      });
+      return result;
+    } else {
+      return arg;
+    }
+  },
+  null, [{type: Fleur.Node, occurence: "*"}], true, false, {type: Fleur.Node});
+Fleur.signatures.fn_parse_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    },
+    {
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["parse#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:parse",
-	function(arg, serialization) {
-		var contentType;
-		if (serialization) {
-			var a2 = Fleur.Atomize(serialization);
-			var	op2 = Fleur.toJSObject(a2);
-			if (op2[0] < 0) {
-				callback(a2);
-				return;
-			}
-			serialization = op2[1];
-			contentType = Fleur.toContentType(serialization);
-		} else {
-			contentType = "application/xml";
-		}
-		var parser = new Fleur.DOMParser();
-		return arg !== null ? parser.parseFromString(arg, contentType) : null;
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Node, occurence: "?"});
+  function(arg, serialization) {
+    var contentType;
+    if (serialization) {
+      var a2 = Fleur.Atomize(serialization);
+      var  op2 = Fleur.toJSObject(a2);
+      if (op2[0] < 0) {
+        callback(a2);
+        return;
+      }
+      serialization = op2[1];
+      contentType = Fleur.toContentType(serialization);
+    } else {
+      contentType = "application/xml";
+    }
+    var parser = new Fleur.DOMParser();
+    return arg !== null ? parser.parseFromString(arg, contentType) : null;
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Node, occurence: "?"});
+Fleur.signatures.fn_parse$_ietf$_date_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_dateTime,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["parse-ietf-date#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:parse-ietf-date",
-	function(value) {
-		return value ? new Date(value) : null;
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_dateTime});
+  function(value) {
+    return value ? new Date(value) : null;
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_dateTime});
+Fleur.signatures.fn_parse$_md_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["parse-md#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:parse-md",
-	function(arg) {
-		var parser = new Fleur.DOMParser();
-		return arg !== null ? parser.parseFromString(arg, "text/markdown") : null;
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Node, occurence: "?"});
+  function(arg) {
+    var parser = new Fleur.DOMParser();
+    return arg !== null ? parser.parseFromString(arg, "text/markdown") : null;
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Node, occurence: "?"});
+Fleur.signatures.fn_parse$_xml_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["parse-xml#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:parse-xml",
-	function(arg) {
-		var parser = new Fleur.DOMParser();
-		return arg !== null ? parser.parseFromString(arg, "application/xml") : null;
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Node, occurence: "?"});
+  function(arg) {
+    var parser = new Fleur.DOMParser();
+    return arg !== null ? parser.parseFromString(arg, "application/xml") : null;
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Node, occurence: "?"});
 Fleur.signatures.fn_position_0 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_integer},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "?"
+  },
   params_type: []
 };
 Fleur.Context.prototype.fn_position_0 = function() {
   this.itemstack.push(this.item);
-	const item = new Fleur.Text();
-	item.data = String(this.position);
-	item.schemaTypeInfo = Fleur.Type_integer;
+  const item = new Fleur.Text();
+  item.data = String(this.position);
+  item.schemaTypeInfo = Fleur.Type_integer;
   this.item = item;
   return this;
 };
 Fleur.XPathFunctions_fn["position#0"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:position",
-	function(ctx) {
-		return ctx._pos;
-	},
-	null, [], true, false, {type: Fleur.Type_integer});
+  function(ctx) {
+    return ctx._pos;
+  },
+  null, [], true, false, {type: Fleur.Type_integer});
+Fleur.signatures.fn_QName_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_QName,
+    occurrence: "1"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["QName#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:QName",
-	function(paramURI, paramQName) {
-		var	a = new Fleur.Text();
-		a.schemaTypeInfo = Fleur.Type_QName;
-		a._setNodeNameLocalNamePrefix(paramURI, paramQName);
-		return a;
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_QName});
+  function(paramURI, paramQName) {
+    var  a = new Fleur.Text();
+    a.schemaTypeInfo = Fleur.Type_QName;
+    a._setNodeNameLocalNamePrefix(paramURI, paramQName);
+    return a;
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_QName});
+Fleur.signatures.fn_remove_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: null,
+  params_type: [
+    null,
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_integer,
+      occurrence: "1"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["remove"] = function(ctx, children, callback) {
-	if (children.length !== 2) {
-		Fleur.callback(function() {callback(Fleur.error(ctx, "XPST0017"));});
-		return;
-	}
-	Fleur.XQueryEngine[children[0][0]](ctx, children[0][1], function(n) {
-		if (n === Fleur.EmptySequence || n.schemaTypeInfo === Fleur.Type_error) {
-			Fleur.callback(function() {callback(n);});
-			return;
-		}
-		var seq = n;
-		Fleur.XQueryEngine[children[1][0]](ctx, children[1][1], function(n) {
-			var i, l, index, result;
-			var a = Fleur.Atomize(n);
-			if (a.schemaTypeInfo === Fleur.Type_error) {
-				Fleur.callback(function() {callback(a);});
-				return;
-			}
-			if (a.schemaTypeInfo !== Fleur.Type_integer) {
-				Fleur.callback(function() {callback(Fleur.error(ctx, "FORG0006"));});
-				return;
-			}
-			index = parseInt(a.data, 10) - 1;
-			if (seq.nodeType === Fleur.Node.SEQUENCE_NODE) {
-				l = seq.childNodes.length;
-				if (index >= 0 && index < l) {
-					result = new Fleur.Sequence();
-					result.nodeType = Fleur.Node.SEQUENCE_NODE;
-					i = 0;
-					while (i < index) {
-						result.appendChild(seq.childNodes[i]);
-						i++;
-					}
-					i++;
-					while (i < l) {
-						result.appendChild(seq.childNodes[i]);
-						i++;
-					}
-					if (result.childNodes.length === 1) {
-						result = result.childNodes[0];
-					}
-				} else {
-					result = seq;
-				}
-			} else if (index === 0) {
-				result = Fleur.EmptySequence;
-			} else {
-				result = seq;
-			}
-			Fleur.callback(function() {callback(result);});
-		});
-	});
+  if (children.length !== 2) {
+    Fleur.callback(function() {callback(Fleur.error(ctx, "XPST0017"));});
+    return;
+  }
+  Fleur.XQueryEngine[children[0][0]](ctx, children[0][1], function(n) {
+    if (n === Fleur.EmptySequence || n.schemaTypeInfo === Fleur.Type_error) {
+      Fleur.callback(function() {callback(n);});
+      return;
+    }
+    var seq = n;
+    Fleur.XQueryEngine[children[1][0]](ctx, children[1][1], function(n) {
+      var i, l, index, result;
+      var a = Fleur.Atomize(n);
+      if (a.schemaTypeInfo === Fleur.Type_error) {
+        Fleur.callback(function() {callback(a);});
+        return;
+      }
+      if (a.schemaTypeInfo !== Fleur.Type_integer) {
+        Fleur.callback(function() {callback(Fleur.error(ctx, "FORG0006"));});
+        return;
+      }
+      index = parseInt(a.data, 10) - 1;
+      if (seq.nodeType === Fleur.Node.SEQUENCE_NODE) {
+        l = seq.childNodes.length;
+        if (index >= 0 && index < l) {
+          result = new Fleur.Sequence();
+          result.nodeType = Fleur.Node.SEQUENCE_NODE;
+          i = 0;
+          while (i < index) {
+            result.appendChild(seq.childNodes[i]);
+            i++;
+          }
+          i++;
+          while (i < l) {
+            result.appendChild(seq.childNodes[i]);
+            i++;
+          }
+          if (result.childNodes.length === 1) {
+            result = result.childNodes[0];
+          }
+        } else {
+          result = seq;
+        }
+      } else if (index === 0) {
+        result = Fleur.EmptySequence;
+      } else {
+        result = seq;
+      }
+      Fleur.callback(function() {callback(result);});
+    });
+  });
+};
+Fleur.signatures.fn_replace_3 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "1"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    }
+  ]
+};
+Fleur.signatures.fn_replace_4 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "1"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    }
+  ]
 };
 Fleur.XPathFunctions_fn["replace#3"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:replace",
-	function(input, pattern, replacement) {
-		return Fleur.XPathFunctions_fn["replace#4"].jsfunc(input, pattern, replacement);
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_string});
+  function(input, pattern, replacement) {
+    return Fleur.XPathFunctions_fn["replace#4"].jsfunc(input, pattern, replacement);
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}, {type: Fleur.Type_string}], false, false, {type: Fleur.Type_string});
 Fleur.XPathFunctions_fn["replace#4"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:replace",
-	function(input, pattern, replacement, flags) {
-			input = input || "";
-			flags = (flags || "") + "g";
-			try {
-				var re = new RegExp(pattern, flags);
-				return input.replace(re, replacement);
-			} catch (e) {
-				return input;
-			}
-	},
-	null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}, {type: Fleur.Type_string}, {type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_string});
+  function(input, pattern, replacement, flags) {
+      input = input || "";
+      flags = (flags || "") + "g";
+      try {
+        var re = new RegExp(pattern, flags);
+        return input.replace(re, replacement);
+      } catch (e) {
+        return input;
+      }
+  },
+  null, [{type: Fleur.Type_string, occurence: "?"}, {type: Fleur.Type_string}, {type: Fleur.Type_string}, {type: Fleur.Type_string, occurence: "?"}], false, false, {type: Fleur.Type_string});
 Fleur.signatures.fn_reverse_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Node, occurence: "*"},
+  return_type: null,
   params_type: [
-    {type: Fleur.Node, occurence: "*"}
+    null
   ]
 };
 Fleur.Context.prototype.fn_reverse_1 = function() {
   if (this.item.nodeType === Fleur.Node.SEQUENCE_NODE && this.item.childNodes.length !== 0) {
-		const result = new Fleur.Sequence();
-		let i = this.item.childNodes.length - 1;
-		while (i >= 0) {
-			result.appendChild(this.item.childNodes[i]);
-			i--;
-		}
-		this.item = result;
-	}
+    const result = new Fleur.Sequence();
+    let i = this.item.childNodes.length - 1;
+    while (i >= 0) {
+      result.appendChild(this.item.childNodes[i]);
+      i--;
+    }
+    this.item = result;
+  }
   return this;
 };
 Fleur.XPathFunctions_fn["reverse#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:reverse",
-	function(arg) {
-		if (arg === Fleur.EmptySequence) {
-			return Fleur.EmptySequence;
-		}
-		if (arg.nodeType === Fleur.Node.SEQUENCE_NODE) {
-			var result = new Fleur.Sequence();
-			result.nodeType = Fleur.Node.SEQUENCE_NODE;
-			var i = arg.childNodes.length - 1;
-			while (i >= 0) {
-				result.appendChild(arg.childNodes[i]);
-				i--;
-			}
-			return result;
-		}
-		return arg;
-	},
-	null, [{type: Fleur.Node, occurence: "*"}], false, false, {type: Fleur.Node, occurence: "*"});
+  function(arg) {
+    if (arg === Fleur.EmptySequence) {
+      return Fleur.EmptySequence;
+    }
+    if (arg.nodeType === Fleur.Node.SEQUENCE_NODE) {
+      var result = new Fleur.Sequence();
+      result.nodeType = Fleur.Node.SEQUENCE_NODE;
+      var i = arg.childNodes.length - 1;
+      while (i >= 0) {
+        result.appendChild(arg.childNodes[i]);
+        i--;
+      }
+      return result;
+    }
+    return arg;
+  },
+  null, [{type: Fleur.Node, occurence: "*"}], false, false, {type: Fleur.Node, occurence: "*"});
+Fleur.signatures.fn_round_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
+  ]
+};
+Fleur.signatures.fn_round_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_integer,
+      occurrence: "1"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["round#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:round",
-	function(arg) {
-		if (arg === null) {
-			return [null, null];
-		}
-		var a = arg[0];
-		var t = arg[1];
-		var a2, t2;
-		a2 = Math.round(a);
-		t2 = t;
-		return [a2, t2];
-	},
-	null, [{type: Fleur.numericTypes, adaptative: true, occurence: "?"}], false, false, {type: Fleur.numericTypes, adaptative: true, occurence: "?"});
+  function(arg) {
+    if (arg === null) {
+      return [null, null];
+    }
+    var a = arg[0];
+    var t = arg[1];
+    var a2, t2;
+    a2 = Math.round(a);
+    t2 = t;
+    return [a2, t2];
+  },
+  null, [{type: Fleur.numericTypes, adaptative: true, occurence: "?"}], false, false, {type: Fleur.numericTypes, adaptative: true, occurence: "?"});
 Fleur.XPathFunctions_fn["round#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:round",
-	function(arg, precision) {
-		if (arg === null) {
-			return [null, null];
-		}
-		var a = arg[0];
-		var t = arg[1];
-		var a2, t2;
-		a2 = Math.round(a * Math.pow(10, precision) + Math.pow(10, Math.floor(Math.log(Math.abs(a)) * Math.LOG10E) + precision - 15)) / Math.pow(10, precision);
-		t2 = t;
-		return [a2, t2];
-	},
-	null, [{type: Fleur.numericTypes, adaptative: true, occurence: "?"}, {type: Fleur.Type_integer}], false, false, {type: Fleur.numericTypes, adaptative: true, occurence: "?"});
+  function(arg, precision) {
+    if (arg === null) {
+      return [null, null];
+    }
+    var a = arg[0];
+    var t = arg[1];
+    var a2, t2;
+    a2 = Math.round(a * Math.pow(10, precision) + Math.pow(10, Math.floor(Math.log(Math.abs(a)) * Math.LOG10E) + precision - 15)) / Math.pow(10, precision);
+    t2 = t;
+    return [a2, t2];
+  },
+  null, [{type: Fleur.numericTypes, adaptative: true, occurence: "?"}, {type: Fleur.Type_integer}], false, false, {type: Fleur.numericTypes, adaptative: true, occurence: "?"});
+Fleur.signatures.fn_round$_half$_to$_even_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
+  ]
+};
+Fleur.signatures.fn_round$_half$_to$_even_2 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_integer,
+      occurrence: "1"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["round-half-to-even#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:round-half-to-even",
-	function(arg) {
-		if (arg === null) {
-			return [null, null];
-		}
-		var a = arg[0];
-		var t = arg[1];
-		var a2, t2;
-		if (a - Math.floor(a) === 0.5 && Math.floor(a) % 2 === 0) {
-			a -= 1;
-		}
-		a2 = Math.round(a);
-		t2 = t;
-		return [a2, t2];
-	},
-	null, [{type: Fleur.numericTypes, adaptative: true, occurence: "?"}], false, false, {type: Fleur.numericTypes, adaptative: true, occurence: "?"});
+  function(arg) {
+    if (arg === null) {
+      return [null, null];
+    }
+    var a = arg[0];
+    var t = arg[1];
+    var a2, t2;
+    if (a - Math.floor(a) === 0.5 && Math.floor(a) % 2 === 0) {
+      a -= 1;
+    }
+    a2 = Math.round(a);
+    t2 = t;
+    return [a2, t2];
+  },
+  null, [{type: Fleur.numericTypes, adaptative: true, occurence: "?"}], false, false, {type: Fleur.numericTypes, adaptative: true, occurence: "?"});
 Fleur.XPathFunctions_fn["round-half-to-even#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:round-half-to-even",
-	function(arg, precision) {
-		if (arg === null) {
-			return [null, null];
-		}
-		var a = arg[0];
-		var t = arg[1];
-		var a2;
-		a2 = a * Math.pow(10, precision) + Math.pow(10, Math.floor(Math.log(Math.abs(a)) * Math.LOG10E) + precision - 15);
-		if (a2 === Number.POSITIVE_INFINITY) {
-			return [a, t];
-		}
-		if (a2 === 0) {
-			return [0, t];
-		}
-		if (Math.round(a2 * 2) / 2  - Math.floor(a2) === 0.5 && Math.floor(a2) % 2 === 0) {
-			a2 -= 1;
-		}
-		return [Math.round(a2) * Math.pow(10, -precision), t];
-	},
-	null, [{type: Fleur.numericTypes, adaptative: true, occurence: "?"}, {type: Fleur.Type_integer}], false, false, {type: Fleur.numericTypes, adaptative: true, occurence: "?"});
+  function(arg, precision) {
+    if (arg === null) {
+      return [null, null];
+    }
+    var a = arg[0];
+    var t = arg[1];
+    var a2;
+    a2 = a * Math.pow(10, precision) + Math.pow(10, Math.floor(Math.log(Math.abs(a)) * Math.LOG10E) + precision - 15);
+    if (a2 === Number.POSITIVE_INFINITY) {
+      return [a, t];
+    }
+    if (a2 === 0) {
+      return [0, t];
+    }
+    if (Math.round(a2 * 2) / 2  - Math.floor(a2) === 0.5 && Math.floor(a2) % 2 === 0) {
+      a2 -= 1;
+    }
+    return [Math.round(a2) * Math.pow(10, -precision), t];
+  },
+  null, [{type: Fleur.numericTypes, adaptative: true, occurence: "?"}, {type: Fleur.Type_integer}], false, false, {type: Fleur.numericTypes, adaptative: true, occurence: "?"});
+Fleur.signatures.fn_seconds$_from$_dateTime_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_decimal,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_dateTime,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["seconds-from-dateTime#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:seconds-from-dateTime",
-	function(arg) {
-		return arg !== null ? parseFloat(arg.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:(\d{2}(?:\.\d+)?)(?:Z|[+\-]\d{2}:\d{2})?$/)[1]) : null;
-	},
-	null, [{type: Fleur.Type_dateTime, occurence: "?"}], true, false, {type: Fleur.Type_decimal, occurence: "?"});
+  function(arg) {
+    return arg !== null ? parseFloat(arg.match(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:(\d{2}(?:\.\d+)?)(?:Z|[+\-]\d{2}:\d{2})?$/)[1]) : null;
+  },
+  null, [{type: Fleur.Type_dateTime, occurence: "?"}], true, false, {type: Fleur.Type_decimal, occurence: "?"});
+ Fleur.signatures.fn_seconds$_from$_dateTime_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_decimal,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_duration,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["seconds-from-duration#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:seconds-from-duration",
-	function(arg) {
-		var a = Fleur.Atomize(arg);
-		if (a === Fleur.EmptySequence) {
-			return null;
-		}
-		if (a.schemaTypeInfo === Fleur.Type_yearMonthDuration) {
-			return 0;
-		}
-		if (a.schemaTypeInfo === Fleur.Type_dayTimeDuration) {
-			var d = Fleur.toJSONDayTimeDuration(a.data);
-			return d.sign * d.second;
-		}
-		var e = new Error("");
-		e.name = "XPTY0004";
-		return e;
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_decimal, occurence: "?"});
+  function(arg) {
+    var a = Fleur.Atomize(arg);
+    if (a === Fleur.EmptySequence) {
+      return null;
+    }
+    if (a.schemaTypeInfo === Fleur.Type_yearMonthDuration) {
+      return 0;
+    }
+    if (a.schemaTypeInfo === Fleur.Type_dayTimeDuration) {
+      var d = Fleur.toJSONDayTimeDuration(a.data);
+      return d.sign * d.second;
+    }
+    var e = new Error("");
+    e.name = "XPTY0004";
+    return e;
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_decimal, occurence: "?"});
+Fleur.signatures.fn_seconds$_from$_time_1 = {
+  need_ctx: false,
+  is_async: false,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_decimal,
+    occurrence: "?"
+  },
+  params_type: [
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_time,
+      occurrence: "?"
+    }
+  ]
+};
 Fleur.XPathFunctions_fn["seconds-from-time#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:seconds-from-time",
-	function(arg) {
-		return arg !== null ? parseFloat(arg.match(/^\d{2}:\d{2}:(\d{2}(?:\.\d+)?)(?:Z|[+\-]\d{2}:\d{2})?$/)[1]) : null;
-	},
-	null, [{type: Fleur.Type_time, occurence: "?"}], true, false, {type: Fleur.Type_decimal, occurence: "?"});
+  function(arg) {
+    return arg !== null ? parseFloat(arg.match(/^\d{2}:\d{2}:(\d{2}(?:\.\d+)?)(?:Z|[+\-]\d{2}:\d{2})?$/)[1]) : null;
+  },
+  null, [{type: Fleur.Type_time, occurence: "?"}], true, false, {type: Fleur.Type_decimal, occurence: "?"});
 Fleur.XPathFunctions_fn["serialize#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:serialize",
-	function(node) {
-		return Fleur.XPathFunctions_fn["serialize#2"].jsfunc(node, null);
-	},
-	null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_string});
+  function(node) {
+    return Fleur.XPathFunctions_fn["serialize#2"].jsfunc(node, null);
+  },
+  null, [{type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_string});
 Fleur.XPathFunctions_fn["serialize#2"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:serialize",
-	function(node, serialization) {
-		var contentType;
-		var defContentType = null;
-		var i, l;
-		var defDetect = function(n) {
-			switch(n.nodeType) {
-				case Fleur.Node.ARRAY_NODE :
-				case Fleur.Node.MAP_NODE :
-					defContentType = "application/json";
-					break;
-				case Fleur.Node.TEXT_NODE:
-					defContentType = "text/plain";
-					break;
-				case Fleur.Node.SEQUENCE_NODE:
-					defContentType = "text/csv";
-					break;
-				case Fleur.Node.ELEMENT_NODE:
-					defContentType = "application/xml";
-			}
-		};
-		if (node.nodeType === Fleur.Node.DOCUMENT_NODE) {
-			for (i = 0, l = node.children.length; i < l && !defContentType; i++) {
-				defDetect(node.children[i]);
-			}
-			for (i = 0, l = node.childNodes.length; i < l && !defContentType; i++) {
-				defDetect(node.childNodes[i]);
-			}
-		} else {
-			defDetect(node);
-		}
-		var indent = false;
-		if (serialization) {
-			var a2 = Fleur.Atomize(serialization);
-			var	op2 = Fleur.toJSObject(a2);
-			if (op2[0] < 0) {
-				return a2;
-			}
-			contentType = Fleur.toContentType(op2[1], defContentType);
-			indent = op2[1].indent === "yes";
-		}
-		if (!contentType) {
-			contentType = defContentType;
-		}
-		var ser = new Fleur.Serializer();
-		return ser.serializeToString(node, contentType, indent);
-	},
-	null, [{type: Fleur.Node, occurence: "?"}, {type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_string});
+  function(node, serialization) {
+    var contentType;
+    var defContentType = null;
+    var i, l;
+    var defDetect = function(n) {
+      switch(n.nodeType) {
+        case Fleur.Node.ARRAY_NODE :
+        case Fleur.Node.MAP_NODE :
+          defContentType = "application/json";
+          break;
+        case Fleur.Node.TEXT_NODE:
+          defContentType = "text/plain";
+          break;
+        case Fleur.Node.SEQUENCE_NODE:
+          defContentType = "text/csv";
+          break;
+        case Fleur.Node.ELEMENT_NODE:
+          defContentType = "application/xml";
+      }
+    };
+    if (node.nodeType === Fleur.Node.DOCUMENT_NODE) {
+      for (i = 0, l = node.children.length; i < l && !defContentType; i++) {
+        defDetect(node.children[i]);
+      }
+      for (i = 0, l = node.childNodes.length; i < l && !defContentType; i++) {
+        defDetect(node.childNodes[i]);
+      }
+    } else {
+      defDetect(node);
+    }
+    var indent = false;
+    if (serialization) {
+      var a2 = Fleur.Atomize(serialization);
+      var  op2 = Fleur.toJSObject(a2);
+      if (op2[0] < 0) {
+        return a2;
+      }
+      contentType = Fleur.toContentType(op2[1], defContentType);
+      indent = op2[1].indent === "yes";
+    }
+    if (!contentType) {
+      contentType = defContentType;
+    }
+    var ser = new Fleur.Serializer();
+    return ser.serializeToString(node, contentType, indent);
+  },
+  null, [{type: Fleur.Node, occurence: "?"}, {type: Fleur.Node, occurence: "?"}], false, false, {type: Fleur.Type_string});
 Fleur.XPathFunctions_fn["sort#1"] = new Fleur.Function("http://www.w3.org/2005/xpath-functions", "fn:sort",
 	function(input) {
 		return Fleur.XPathFunctions_fn["sort#3"].jsfunc(input, null, null);
@@ -10544,7 +11966,11 @@ Fleur.XPathFunctions_fn["translate#3"] = new Fleur.Function("http://www.w3.org/2
 Fleur.signatures.fn_true_0 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_boolean},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_boolean,
+    occurrence: "1"
+  },
   params_type: []
 };
 Fleur.Context.prototype.fn_true_0 = function() {
@@ -11334,9 +12760,17 @@ Fleur.XPathFunctions_map["remove#2"] = new Fleur.Function("http://www.w3.org/200
 Fleur.signatures.math_acos_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_double, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.math_acos_1 = function() {
@@ -11359,9 +12793,17 @@ Fleur.XPathFunctions_math["acos#1"] = new Fleur.Function("http://www.w3.org/2005
 Fleur.signatures.math_asin_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_double, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.math_asin_1 = function() {
@@ -11384,9 +12826,17 @@ Fleur.XPathFunctions_math["asin#1"] = new Fleur.Function("http://www.w3.org/2005
 Fleur.signatures.math_atan_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_double, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.math_atan_1 = function() {
@@ -11409,10 +12859,23 @@ Fleur.XPathFunctions_math["atan#1"] = new Fleur.Function("http://www.w3.org/2005
 Fleur.signatures.math_atan2_2 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_double},
-    {type: Fleur.Type_double}  ]
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
+  ]
 };
 Fleur.Context.prototype.math_atan2_2 = function() {
   const arg2 = this.item;
@@ -11437,9 +12900,17 @@ Fleur.XPathFunctions_math["atan2#2"] = new Fleur.Function("http://www.w3.org/200
 Fleur.signatures.math_cos_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_double, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.math_cos_1 = function() {
@@ -11462,9 +12933,17 @@ Fleur.XPathFunctions_math["cos#1"] = new Fleur.Function("http://www.w3.org/2005/
 Fleur.signatures.math_exp_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_double, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.math_exp_1 = function() {
@@ -11487,9 +12966,17 @@ Fleur.XPathFunctions_math["exp#1"] = new Fleur.Function("http://www.w3.org/2005/
 Fleur.signatures.math_exp10_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_double, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.math_exp10_1 = function() {
@@ -11512,9 +12999,17 @@ Fleur.XPathFunctions_math["exp10#1"] = new Fleur.Function("http://www.w3.org/200
 Fleur.signatures.math_log_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_double, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.math_log_1 = function() {
@@ -11537,9 +13032,17 @@ Fleur.XPathFunctions_math["log#1"] = new Fleur.Function("http://www.w3.org/2005/
 Fleur.signatures.math_log10_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_double, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.math_log10_1 = function() {
@@ -11562,7 +13065,11 @@ Fleur.XPathFunctions_math["log10#1"] = new Fleur.Function("http://www.w3.org/200
 Fleur.signatures.math_pi_0 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
   params_type: []
 };
 Fleur.Context.prototype.math_pi_0 = function() {
@@ -11579,10 +13086,23 @@ Fleur.XPathFunctions_math["pi#0"] = new Fleur.Function("http://www.w3.org/2005/x
 Fleur.signatures.math_pow_2 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_double},
-    {type: Fleur.Type_double}  ]
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    },
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
+  ]
 };
 Fleur.Context.prototype.math_pow_2 = function() {
   const arg1 = this.itemstack.pop();
@@ -11610,9 +13130,17 @@ Fleur.XPathFunctions_math["pow#2"] = new Fleur.Function("http://www.w3.org/2005/
 Fleur.signatures.math_sin_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_double, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.math_sin_1 = function() {
@@ -11635,9 +13163,17 @@ Fleur.XPathFunctions_math["sin#1"] = new Fleur.Function("http://www.w3.org/2005/
 Fleur.signatures.math_sqrt_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_double, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.math_sqrt_1 = function() {
@@ -11660,9 +13196,17 @@ Fleur.XPathFunctions_math["sqrt#1"] = new Fleur.Function("http://www.w3.org/2005
 Fleur.signatures.math_tan_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_double, occurence: "?"},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: "?"
+  },
   params_type: [
-    {type: Fleur.Type_double, occurence: "?"}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_numeric,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.math_tan_1 = function() {
@@ -12263,11 +13807,15 @@ Fleur.XPathFunctions_unit["information#1"] = new Fleur.Function("http://www.agen
 Fleur.signatures.xf_choose_3 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Node},
+  return_type: null,
   params_type: [
-    {type: Fleur.Type_boolean},
-    {type: Fleur.Node},
-    {type: Fleur.Node}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_boolean,
+      occurrence: "1"
+    },
+    null,
+    null
   ]
 };
 Fleur.Context.prototype.xf_choose_3 = function() {
@@ -12281,7 +13829,7 @@ Fleur.Context.prototype.xf_choose_3 = function() {
 Fleur.signatures.xf_context_0 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Node},
+  return_type: null,
   params_type: []
 };
 Fleur.Context.prototype.xf_context_0 = function() {
@@ -12311,11 +13859,15 @@ Fleur.Context.prototype.xf_event_1 = function() {
 Fleur.signatures.xf_if_3 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Node},
+  return_type: null,
   params_type: [
-    {type: Fleur.Node},
-    {type: Fleur.Node},
-    {type: Fleur.Node}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_boolean,
+      occurrence: "1"
+    },
+    null,
+    null
   ]
 };
 Fleur.Context.prototype.xf_if_3 = function() {
@@ -12329,15 +13881,19 @@ Fleur.Context.prototype.xf_if_3 = function() {
 Fleur.signatures.xf_instance_0 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Node},
+  return_type: null,
   params_type: []
 };
 Fleur.signatures.xf_instance_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Node},
+  return_type: null,
   params_type: [
-    {type: Fleur.Type_string}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    }
   ]
 };
 Fleur.Context.prototype.xf_instance_0 = function() {
@@ -12355,7 +13911,11 @@ Fleur.Context.prototype.xf_instance_1 = function() {
 Fleur.signatures.xf_instance$_ids_0 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_string},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "*"
+  },
   params_type: []
 };
 Fleur.Context.prototype.xf_instance$_ids_0 = function() {
@@ -12374,9 +13934,17 @@ Fleur.Context.prototype.xf_instance$_ids_0 = function() {
 Fleur.signatures.xf_js$_eval_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_string},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "1"
+  },
   params_type: [
-    {type: Fleur.Type_string}
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "1"
+    }
   ]
 };
 Fleur.Context.prototype.xf_js$_eval_1 = function() {
@@ -12386,7 +13954,11 @@ Fleur.Context.prototype.xf_js$_eval_1 = function() {
 Fleur.signatures.xf_now_0 = {
   need_ctx: false,
   is_async: false,
-  return_type: {type: Fleur.Type_dateTime},
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_dateTime,
+    occurrence: "1"
+  },
   params_type: []
 };
 Fleur.Context.prototype.xf_now_0 = function() {
@@ -12404,9 +13976,17 @@ Fleur.XPathFunctions_xquery["main-module"] = function(ctx, children, callback) {
 Fleur.signatures.xs_anyURI_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_anyURI,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_anyURI,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_anyURI_1 = function() {
@@ -12421,30 +14001,46 @@ Fleur.XPathFunctions_xs["anyURI#1"] = new Fleur.Function("http://www.w3.org/2001
 Fleur.signatures.xs_base64Binary_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_base64Binary,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_base64Binary,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_base64Binary_1 = function() {
-	this.typeConstructor(Fleur.Type_base64Binary);
-	return this;
+  this.typeConstructor(Fleur.Type_base64Binary);
+  return this;
 };
 Fleur.XPathFunctions_xs["base64Binary#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:base64Binary",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_base64Binary, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_base64Binary, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_boolean_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_boolean,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_boolean,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_boolean_1 = function() {
-	if (this.item.isNotEmpty()) {
+  if (this.item.isNotEmpty()) {
     const schematype = this.item.schemaTypeInfo;
     if (schematype !== Fleur.Type_boolean) {
       if (schematype === Fleur.Type_integer || schematype === Fleur.Type_decimal || schematype === Fleur.Type_float || schematype === Fleur.Type_double) {
@@ -12461,790 +14057,1142 @@ Fleur.Context.prototype.xs_boolean_1 = function() {
   return this;
 };
 Fleur.XPathFunctions_xs["boolean#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:boolean",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_boolean, function(node) {
-			if (node.schemaTypeInfo === Fleur.Type_integer || node.schemaTypeInfo === Fleur.Type_decimal || node.schemaTypeInfo === Fleur.Type_float || node.schemaTypeInfo === Fleur.Type_double) {
-				node.data = (node.data === "0" || node.data === "NaN") ? "false" : "true";
-			} else {
-				node = Fleur.error(ctx, "FORG0001");
-			}
-		});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_boolean, function(node) {
+      if (node.schemaTypeInfo === Fleur.Type_integer || node.schemaTypeInfo === Fleur.Type_decimal || node.schemaTypeInfo === Fleur.Type_float || node.schemaTypeInfo === Fleur.Type_double) {
+        node.data = (node.data === "0" || node.data === "NaN") ? "false" : "true";
+      } else {
+        node = Fleur.error(ctx, "FORG0001");
+      }
+    });
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_byte_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_byte,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_byte,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_byte_1 = function() {
-	this.typeConstructor(Fleur.Type_byte);
-	return this;
+  this.typeConstructor(Fleur.Type_byte);
+  return this;
 };
 Fleur.XPathFunctions_xs["byte#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:byte",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_byte, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_byte, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_date_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_date,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_date,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_date_1 = function() {
-	this.typeConstructor(Fleur.Type_date);
-	return this;
+  this.typeConstructor(Fleur.Type_date);
+  return this;
 };
 Fleur.XPathFunctions_xs["date#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:date",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_date, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_date, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_dateTime_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_dateTime,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_dateTime,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_dateTime_1 = function() {
-	this.typeConstructor(Fleur.Type_dateTime);
-	return this;
+  this.typeConstructor(Fleur.Type_dateTime);
+  return this;
 };
 Fleur.XPathFunctions_xs["dateTime#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:dateTime",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_dateTime, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_dateTime, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_dateTimeStamp_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_dateTimeStamp,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_dateTimeStamp,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_dateTimeStamp_1 = function() {
-	this.typeConstructor(Fleur.Type_dateTimeStamp);
-	return this;
+  this.typeConstructor(Fleur.Type_dateTimeStamp);
+  return this;
 };
 Fleur.XPathFunctions_xs["dateTimeStamp#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:dateTimeStamp",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_dateTimeStamp, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_dateTimeStamp, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_dayTimeDuration_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_dayTimeDuration,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_dayTimeDuration,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_dayTimeDuration_1 = function() {
-	this.typeConstructor(Fleur.Type_dayTimeDuration);
-	return this;
+  this.typeConstructor(Fleur.Type_dayTimeDuration);
+  return this;
 };
 Fleur.XPathFunctions_xs["dayTimeDuration#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:dayTimeDuration",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_dayTimeDuration, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_dayTimeDuration, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_decimal_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_decimal,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_decimal,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_decimal_1 = function() {
-	this.typeConstructor(Fleur.Type_decimal);
-	return this;
+  this.typeConstructor(Fleur.Type_decimal);
+  return this;
 };
 Fleur.XPathFunctions_xs["decimal#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:decimal",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_decimal, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_decimal, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_double_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_double,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_double,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_double_1 = function() {
-	this.typeConstructor(Fleur.Type_double);
-	return this;
+  this.typeConstructor(Fleur.Type_double);
+  return this;
 };
 Fleur.XPathFunctions_xs["double#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:double",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_double, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_double, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_duration_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_duration,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_duration,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_duration_1 = function() {
-	this.typeConstructor(Fleur.Type_duration);
-	return this;
+  this.typeConstructor(Fleur.Type_duration);
+  return this;
 };
 Fleur.XPathFunctions_xs["duration#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:duration",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_duration, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_duration, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_ENTITIES_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_ENTITIES,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_ENTITIES,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_ENTITIES_1 = function() {
-	this.typeConstructor(Fleur.Type_ENTITIES);
-	return this;
+  this.typeConstructor(Fleur.Type_ENTITIES);
+  return this;
 };
 Fleur.XPathFunctions_xs["ENTITIES#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:ENTITIES",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_ENTITIES, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_ENTITIES, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_ENTITY_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_ENTITY,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_ENTITY,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs__1 = function() {
-	this.typeConstructor(Fleur.Type_ENTITY);
-	return this;
+  this.typeConstructor(Fleur.Type_ENTITY);
+  return this;
 };
 Fleur.XPathFunctions_xs["ENTITY#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:ENTITY",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_ENTITY, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_ENTITY, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_float_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_float,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_float,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_float_1 = function() {
-	this.typeConstructor(Fleur.Type_float);
-	return this;
+  this.typeConstructor(Fleur.Type_float);
+  return this;
 };
 Fleur.XPathFunctions_xs["float#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:float",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_float, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_float, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_gDay_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_gDay,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_gDay,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_gDay_1 = function() {
-	this.typeConstructor(Fleur.Type_gDay);
-	return this;
+  this.typeConstructor(Fleur.Type_gDay);
+  return this;
 };
 Fleur.XPathFunctions_xs["gDay#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:gDay",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_gDay, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_gDay, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_gMonth_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_gMonth,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_gMonth,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_gMonth_1 = function() {
-	this.typeConstructor(Fleur.Type_gMonth);
-	return this;
+  this.typeConstructor(Fleur.Type_gMonth);
+  return this;
 };
 Fleur.XPathFunctions_xs["gMonth#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:gMonth",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_gMonth, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_gMonth, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_gMonthDay_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_gMonthDay,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_gMonthDay,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_gMonthDay_1 = function() {
-	this.typeConstructor(Fleur.Type_gMonthDay);
-	return this;
+  this.typeConstructor(Fleur.Type_gMonthDay);
+  return this;
 };
 Fleur.XPathFunctions_xs["gMonthDay#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:gMonthDay",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_gMonthDay, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_gMonthDay, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_gYear_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_gYear,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_gYear,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_gYear_1 = function() {
-	this.typeConstructor(Fleur.Type_gYear);
-	return this;
+  this.typeConstructor(Fleur.Type_gYear);
+  return this;
 };
 Fleur.XPathFunctions_xs["gYear#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:gYear",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_gYear, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_gYear, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_gYearMonth_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_gYearMonth,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_gYearMonth,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_gYearMonth_1 = function() {
-	this.typeConstructor(Fleur.Type_gYearMonth);
-	return this;
+  this.typeConstructor(Fleur.Type_gYearMonth);
+  return this;
 };
 Fleur.XPathFunctions_xs["gYearMonth#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:gYearMonth",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_gYearMonth, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_gYearMonth, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_hexBinary_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_hexBinary,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_hexBinary,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_hexBinary_1 = function() {
-	this.typeConstructor(Fleur.Type_hexBinary);
-	return this;
+  this.typeConstructor(Fleur.Type_hexBinary);
+  return this;
 };
 Fleur.XPathFunctions_xs["hexBinary#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:hexBinary",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_hexBinary, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_hexBinary, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_ID_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_ID,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_ID,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_ID_1 = function() {
-	this.typeConstructor(Fleur.Type_ID);
-	return this;
+  this.typeConstructor(Fleur.Type_ID);
+  return this;
 };
 Fleur.XPathFunctions_xs["ID#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:ID",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_ID, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_ID, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_IDREF_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_IDREF,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_IDREF,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_IDREF_1 = function() {
-	this.typeConstructor(Fleur.Type_IDREF);
-	return this;
+  this.typeConstructor(Fleur.Type_IDREF);
+  return this;
 };
 Fleur.XPathFunctions_xs["IDREF#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:IDREF",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_IDREF, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_IDREF, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_IDREFS_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_IDREFS,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_IDREFS,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_IDREFS_1 = function() {
-	this.typeConstructor(Fleur.Type_IDREFS);
-	return this;
+  this.typeConstructor(Fleur.Type_IDREFS);
+  return this;
 };
 Fleur.XPathFunctions_xs["IDREFS#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:IDREFS",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_IDREFS, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_IDREFS, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_int_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_int,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_int,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_int_1 = function() {
-	this.typeConstructor(Fleur.Type_int);
-	return this;
+  this.typeConstructor(Fleur.Type_int);
+  return this;
 };
 Fleur.XPathFunctions_xs["int#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:int",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_int, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_int, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_integer_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_integer,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_integer,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_integer_1 = function() {
-	this.typeConstructor(Fleur.Type_integer);
-	return this;
+  this.typeConstructor(Fleur.Type_integer);
+  return this;
 };
 Fleur.XPathFunctions_xs["integer#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:integer",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_integer, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_integer, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_language_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_language,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_language,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_language_1 = function() {
-	this.typeConstructor(Fleur.Type_language);
-	return this;
+  this.typeConstructor(Fleur.Type_language);
+  return this;
 };
 Fleur.XPathFunctions_xs["language#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:language",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_language, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_language, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_long_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_long,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_long,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_long_1 = function() {
-	this.typeConstructor(Fleur.Type_long);
-	return this;
+  this.typeConstructor(Fleur.Type_long);
+  return this;
 };
 Fleur.XPathFunctions_xs["long#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:long",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_long, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_long, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_Name_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_Name,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_Name,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_Name_1 = function() {
-	this.typeConstructor(Fleur.Type_Name);
-	return this;
+  this.typeConstructor(Fleur.Type_Name);
+  return this;
 };
 Fleur.XPathFunctions_xs["Name#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:Name",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_Name, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_Name, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_NCName_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_NCName,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_NCName,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_NCName_1 = function() {
-	this.typeConstructor(Fleur.Type_NCName);
-	return this;
+  this.typeConstructor(Fleur.Type_NCName);
+  return this;
 };
 Fleur.XPathFunctions_xs["NCName#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:NCName",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_NCName, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_NCName, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_negativeInteger_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_negativeInteger,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_negativeInteger,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_negativeInteger_1 = function() {
-	this.typeConstructor(Fleur.Type_negativeInteger);
-	return this;
+  this.typeConstructor(Fleur.Type_negativeInteger);
+  return this;
 };
 Fleur.XPathFunctions_xs["negativeInteger#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:negativeInteger",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_negativeInteger, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_negativeInteger, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_NMTOKEN_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_NMTOKEN,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_NMTOKEN,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_NMTOKEN_1 = function() {
-	this.typeConstructor(Fleur.Type_NMTOKEN);
-	return this;
+  this.typeConstructor(Fleur.Type_NMTOKEN);
+  return this;
 };
 Fleur.XPathFunctions_xs["NMTOKEN#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:NMTOKEN",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_NMTOKEN, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_NMTOKEN, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_NMTOKENS_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_NMTOKENS,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_NMTOKENS,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_NMTOKENS_1 = function() {
-	this.typeConstructor(Fleur.Type_NMTOKENS);
-	return this;
+  this.typeConstructor(Fleur.Type_NMTOKENS);
+  return this;
 };
 Fleur.XPathFunctions_xs["NMTOKENS#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:NMTOKENS",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_NMTOKENS, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_NMTOKENS, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_nonNegativeInteger_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_nonNegativeInteger,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_nonNegativeInteger,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_nonNegativeInteger_1 = function() {
-	this.typeConstructor(Fleur.Type_nonNegativeInteger);
-	return this;
+  this.typeConstructor(Fleur.Type_nonNegativeInteger);
+  return this;
 };
 Fleur.XPathFunctions_xs["nonNegativeInteger#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:nonNegativeInteger",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_nonNegativeInteger, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_nonNegativeInteger, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_nonPositiveInteger_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_nonPositiveInteger,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_nonPositiveInteger,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_nonPositiveInteger_1 = function() {
-	this.typeConstructor(Fleur.Type_nonPositiveInteger);
-	return this;
+  this.typeConstructor(Fleur.Type_nonPositiveInteger);
+  return this;
 };
 Fleur.XPathFunctions_xs["nonPositiveInteger#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:nonPositiveInteger",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_nonPositiveInteger, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_nonPositiveInteger, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_normalizedString_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_normalizedString,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_normalizedString,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_normalizedString_1 = function() {
-	this.typeConstructor(Fleur.Type_normalizedString);
-	return this;
+  this.typeConstructor(Fleur.Type_normalizedString);
+  return this;
 };
 Fleur.XPathFunctions_xs["normalizedString#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:normalizedString",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_normalizedString, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_normalizedString, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_positiveInteger_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_positiveInteger,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_positiveInteger,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_positiveInteger_1 = function() {
-	this.typeConstructor(Fleur.Type_positiveInteger);
-	return this;
+  this.typeConstructor(Fleur.Type_positiveInteger);
+  return this;
 };
 Fleur.XPathFunctions_xs["positiveInteger#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:positiveInteger",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_positiveInteger, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_positiveInteger, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_QName_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_QName,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_QName,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_QName_1 = function() {
-	this.typeConstructor(Fleur.Type_QName);
-	return this;
+  this.typeConstructor(Fleur.Type_QName);
+  return this;
 };
 Fleur.XPathFunctions_xs["QName#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:QName",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_QName, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_QName, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.XPathFunctions_xs.QName = function(ctx, children, callback) {
-	var namespaceURI, qualifiedName, a;
-	if (children.length === 1) {
-		Fleur.XQueryEngine[children[0][0]](ctx, children[0][1], function(n) {
-			namespaceURI = "";
-			qualifiedName = n.data;
-			a = new Fleur.Text();
-			a.schemaTypeInfo = Fleur.Type_QName;
-			a._setNodeNameLocalNamePrefix(namespaceURI, qualifiedName);
-			Fleur.callback(function() {callback(a);});
-		});
-	} else if (children.length === 2) {
-		Fleur.XQueryEngine[children[0][0]](ctx, children[0][1], function(n) {
-			namespaceURI = n.data;
-			Fleur.XQueryEngine[children[1][0]](ctx, children[1][1], function(n) {
-				qualifiedName = n.data;
-				a = new Fleur.Text();
-				a.schemaTypeInfo = Fleur.Type_QName;
-				a._setNodeNameLocalNamePrefix(namespaceURI, qualifiedName);
-				Fleur.callback(function() {callback(a);});
-			});
-		});
-	} else {
-		Fleur.callback(function() {callback(Fleur.error(ctx, "XPST0017"));});
-	}
+  var namespaceURI, qualifiedName, a;
+  if (children.length === 1) {
+    Fleur.XQueryEngine[children[0][0]](ctx, children[0][1], function(n) {
+      namespaceURI = "";
+      qualifiedName = n.data;
+      a = new Fleur.Text();
+      a.schemaTypeInfo = Fleur.Type_QName;
+      a._setNodeNameLocalNamePrefix(namespaceURI, qualifiedName);
+      Fleur.callback(function() {callback(a);});
+    });
+  } else if (children.length === 2) {
+    Fleur.XQueryEngine[children[0][0]](ctx, children[0][1], function(n) {
+      namespaceURI = n.data;
+      Fleur.XQueryEngine[children[1][0]](ctx, children[1][1], function(n) {
+        qualifiedName = n.data;
+        a = new Fleur.Text();
+        a.schemaTypeInfo = Fleur.Type_QName;
+        a._setNodeNameLocalNamePrefix(namespaceURI, qualifiedName);
+        Fleur.callback(function() {callback(a);});
+      });
+    });
+  } else {
+    Fleur.callback(function() {callback(Fleur.error(ctx, "XPST0017"));});
+  }
 };
 Fleur.signatures.xs_short_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_short,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_short,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_short_1 = function() {
-	this.typeConstructor(Fleur.Type_short);
-	return this;
+  this.typeConstructor(Fleur.Type_short);
+  return this;
 };
 Fleur.XPathFunctions_xs["short#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:short",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_short, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_short, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_string_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_string,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_string_1 = function() {
-	this.typeConstructor(Fleur.Type_string);
-	return this;
+  this.typeConstructor(Fleur.Type_string);
+  return this;
 };
 Fleur.XPathFunctions_xs["string#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:string",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_string, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_string, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_time_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_time,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_time,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_time_1 = function() {
-	this.typeConstructor(Fleur.Type_time);
-	return this;
+  this.typeConstructor(Fleur.Type_time);
+  return this;
 };
 Fleur.XPathFunctions_xs["time#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:time",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_time, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_time, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_token_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_token,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_token,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_token_1 = function() {
-	this.typeConstructor(Fleur.Type_token);
-	return this;
+  this.typeConstructor(Fleur.Type_token);
+  return this;
 };
 Fleur.XPathFunctions_xs["token#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:token",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_token, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_token, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_unsignedByte_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_unsignedByte,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_unsignedByte,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_unsignedByte_1 = function() {
-	this.typeConstructor(Fleur.Type_unsignedByte);
-	return this;
+  this.typeConstructor(Fleur.Type_unsignedByte);
+  return this;
 };
 Fleur.XPathFunctions_xs["unsignedByte#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:unsignedByte",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_unsignedByte, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_unsignedByte, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_unsignedInt_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_unsignedInt,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_unsignedInt,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_unsignedInt_1 = function() {
-	this.typeConstructor(Fleur.Type_unsignedInt);
-	return this;
+  this.typeConstructor(Fleur.Type_unsignedInt);
+  return this;
 };
 Fleur.XPathFunctions_xs["unsignedInt#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:unsignedInt",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_unsignedInt, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_unsignedInt, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_unsignedLong_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_unsignedLong,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_unsignedLong,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_unsignedLong_1 = function() {
-	this.typeConstructor(Fleur.Type_unsignedLong);
-	return this;
+  this.typeConstructor(Fleur.Type_unsignedLong);
+  return this;
 };
 Fleur.XPathFunctions_xs["unsignedLong#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:unsignedLong",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_unsignedLong, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_unsignedLong, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_unsignedShort_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_unsignedShort,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_unsignedShort,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_unsignedShort_1 = function() {
-	this.typeConstructor(Fleur.Type_unsignedShort);
-	return this;
+  this.typeConstructor(Fleur.Type_unsignedShort);
+  return this;
 };
 Fleur.XPathFunctions_xs["unsignedShort#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:unsignedShort",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_unsignedShort, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_unsignedShort, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_untypedAtomic_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_untypedAtomic,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_untypedAtomic,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_untypedAtomic_1 = function() {
-	this.typeConstructor(Fleur.Type_untypedAtomic);
-	return this;
+  this.typeConstructor(Fleur.Type_untypedAtomic);
+  return this;
 };
 Fleur.XPathFunctions_xs["untypedAtomic#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:untypedAtomic",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_untypedAtomic, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_untypedAtomic, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.signatures.xs_yearMonthDuration_1 = {
   need_ctx: false,
   is_async: false,
-  return_type: Fleur.Type_yearMonthDuration,
+  return_type: {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_yearMonthDuration,
+    occurrence: "?"
+  },
   params_type: [
-    Fleur.atomicTypes
+    {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_anySimpleType,
+      occurrence: "?"
+    }
   ]
 };
 Fleur.Context.prototype.xs_yearMonthDuration_1 = function() {
-	this.typeConstructor(Fleur.Type_yearMonthDuration);
-	return this;
+  this.typeConstructor(Fleur.Type_yearMonthDuration);
+  return this;
 };
 Fleur.XPathFunctions_xs["yearMonthDuration#1"] = new Fleur.Function("http://www.w3.org/2001/XMLSchema", "xs:yearMonthDuration",
-	function(arg) {
-		return Fleur.XPathConstructor(arg, Fleur.Type_yearMonthDuration, function() {});
-	},
-	null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
+  function(arg) {
+    return Fleur.XPathConstructor(arg, Fleur.Type_yearMonthDuration, function() {});
+  },
+  null, [{type: Fleur.Node}], false, false, {type: Fleur.Node});
 Fleur.XPathFunctions_zip["deflate#1"] = new Fleur.Function("http://expath.org/ns/zip", "zip:deflate",
 	function(arg) {
 		return Fleur.deflate(arg);
@@ -19371,7 +21319,7 @@ Fleur.Context.prototype.xqx_attributeConstructor = function(prefix, localName) {
   attr.localName = localName;
   attr.prefix = prefix === "" ? null : prefix;
   attr.namespaceURI = this.rs.nsresolver.lookupNamespaceURI(prefix);
-  this.item.schemaType = Fleur.Type_untypedAtomic;
+  this.item.schemaTypeInfo = Fleur.Type_untypedAtomic;
   attr.appendChild(this.item);
   this.item = attr;
   return this;
@@ -19383,7 +21331,7 @@ Fleur.Context.prototype.xqx_attributeConstructor_value = function(prefix, localN
   attr.prefix = prefix === "" ? null : prefix;
   attr.namespaceURI = this.rs.nsresolver.lookupNamespaceURI(prefix);
   const attrvalue = new Fleur.Text(value);
-  attrvalue.schemaType = Fleur.Type_untypedAtomic;
+  attrvalue.schemaTypeInfo = Fleur.Type_untypedAtomic;
   attr.appendChild(attrvalue);
   this.itemstack.push(this.item);
   this.item = attr;
@@ -19399,7 +21347,7 @@ Fleur.XQueryEngine[Fleur.XQueryX.attributeConstructor] = function(ctx, children,
   } else {
     attr.prefix = null;
   }
-  attr.namespaceURI = elt.lookupNamespaceURI(attr.prefix);
+  attr.namespaceURI = elt.lookupNamespaceURI(attr.prefix) || ctx.env.nsresolver.lookupNamespaceURI(attr.prefix);
   if (children[1][0] === Fleur.XQueryX.attributeValue) {
     if (children[1][1].length !== 0) {
       t = new Fleur.Text();
@@ -19537,7 +21485,7 @@ Fleur.Context.prototype.xqx_computedAttributeConstructor = function(prefix, loca
   attr.localName = localName;
   attr.prefix = prefix === "" ? null : prefix;
   attr.namespaceURI = this.rs.nsresolver.lookupNamespaceURI(prefix);
-  this.item.schemaType = Fleur.Type_untypedAtomic;
+  this.item.schemaTypeInfo = Fleur.Type_untypedAtomic;
   attr.appendChild(this.item);
   this.item = attr;
   return this;
@@ -19551,7 +21499,7 @@ Fleur.Context.prototype.xqx_computedAttributeConstructor_expr = function() {
   attr.localName = prefix === "" ? arg1.data : arg1.data.split(":")[1];
   attr.prefix = prefix === "" ? null : prefix;
   attr.namespaceURI = this.rs.nsresolver.lookupNamespaceURI(prefix);
-  arg2.schemaType = Fleur.Type_untypedAtomic;
+  arg2.schemaTypeInfo = Fleur.Type_untypedAtomic;
   attr.appendChild(arg2);
   this.item = attr;
   return this;
@@ -19562,7 +21510,7 @@ Fleur.Context.prototype.xqx_computedAttributeConstructor_URI = function(URI, loc
   attr.localName = localName;
   attr.prefix = null;
   attr.namespaceURI = URI;
-  this.item.schemaType = Fleur.Type_untypedAtomic;
+  this.item.schemaTypeInfo = Fleur.Type_untypedAtomic;
   attr.appendChild(this.item);
   this.item = attr;
   return this;
@@ -19845,7 +21793,14 @@ Fleur.XQueryEngine[Fleur.XQueryX.countClause] = function(ctx, children, callback
   Fleur.callback(function() {callback(Fleur.EmptySequence);});
 };
 Fleur.Transpiler.prototype.xqx_decimalConstantExpr = function(children) {
-  return this.inst("xqx_decimalConstantExpr('" + children[0][1][0] + "')");
+  return {
+    inst: this.inst("xqx_decimalConstantExpr('" + children[0][1][0] + "')", false).inst,
+    sequenceType: {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_decimal,
+      occurrence: 1
+    }
+  };
 };
 Fleur.Context.prototype.xqx_decimalConstantExpr = function(arg) {
   this.itemstack.push(this.item);
@@ -19896,7 +21851,14 @@ Fleur.XQueryEngine[Fleur.XQueryX.documentTest] = function(ctx, children, callbac
   Fleur.callback(function() {callback(ctx._curr.nodeType !== Fleur.Node.DOCUMENT_NODE ? Fleur.EmptySequence : ctx._curr);});
 };
 Fleur.Transpiler.prototype.xqx_doubleConstantExpr = function(children) {
-  return this.inst("xqx_doubleConstantExpr('" + children[0][1][0] + "')");
+  return {
+    inst: this.inst("xqx_doubleConstantExpr('" + children[0][1][0] + "')", false).inst,
+    sequenceType: {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_double,
+      occurrence: 1
+    }
+  };
 };
 Fleur.Context.prototype.xqx_doubleConstantExpr = function(arg) {
   this.itemstack.push(this.item);
@@ -20357,7 +22319,7 @@ Fleur.XQueryEngine[Fleur.XQueryX.forClauseItem] = function(ctx, children, callba
 };
 Fleur.XQueryEngine.updating = false;
 Fleur.XQueryEngine.updateQueue = [];
-Fleur.Transpiler.prototype.xqx_functionCallExpr = function(children, atomicType) {
+Fleur.Transpiler.prototype.xqx_functionCallExpr = function(children, expectedType) {
   var pf2 = "fn";
   var args = children[1][1];
   if (children[0][1][1] && children[0][1][1][0] === Fleur.XQueryX.prefix) {
@@ -20382,15 +22344,34 @@ Fleur.Transpiler.prototype.xqx_functionCallExpr = function(children, atomicType)
   if (!this.async) {
     this.async = fasync;
   }
+  const returnType = libfunc ? libfunc.return_type : {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_string,
+    occurrence: "?"
+  };
   let params = "";
   const paramstype = libfunc ? libfunc.params_type : null;
   for (let i = 0, l = args.length; i < l; i++) {
-    params += this.gen(args[i], libfunc && fname !== "fn_concat" ? paramstype[i].type : Fleur.Type_string);
+    const expectedParamType = libfunc && fname !== "fn_concat" ? paramstype[i] : {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: "?"
+    };
+    const paramgen = this.gen(args[i], expectedParamType);
+    if (libfunc && expectedParamType) {
+      if ((paramgen.sequenceType.occurrence === "0" && (expectedParamType.occurrence === "1" || expectedParamType.occurrence === "+")) || (paramgen.sequenceType.schemaTypeInfo && expectedParamType.schemaTypeInfo && !paramgen.sequenceType.schemaTypeInfo.as(expectedParamType.schemaTypeInfo))) {
+        Fleur.XQueryError_xqt("XPST0017", null, "Invalid type");
+      }
+    }
+    params += paramgen.inst;
   }
   if (!libfunc && typeof window[shortname] !== "function") {
     Fleur.XQueryError_xqt("XPST0017", null, "Unknown Javascript function", "", new Fleur.Text(shortname));
   }
-  return params + this.inst((libfunc ? fname : "xqx_functionCallExpr") + (fasync ? "_async" : "") + "(" + (libfunc ? "" : shortname + ", ") + (fname === "fn_concat" || !libfunc ? String(args.length) : "") + ")", fasync, libfunc && (atomicType !== Fleur.atomicTypes && atomicType !== libfunc.return_type.type || atomicType === Fleur.atomicTypes && libfunc.return_type.type === Fleur.Node) ? atomicType : null);
+  return {
+    inst: params + this.inst((libfunc ? fname : "xqx_functionCallExpr") + (fasync ? "_async" : "") + "(" + (libfunc ? "" : shortname + ", ") + (fname === "fn_concat" || !libfunc ? String(args.length) : "") + ")", fasync, libfunc ? expectedType : null).inst,
+    sequenceType: returnType
+  };
 };
 Fleur.Context.prototype.xqx_functionCallExpr = function(shortname, arglen) {
   const args = [];
@@ -21079,8 +23060,15 @@ Fleur.XQueryEngine[Fleur.XQueryX.instanceOfExpr] = function(ctx, children, callb
     }
   });
 };
-Fleur.Transpiler.prototype.xqx_integerConstantExpr = function(children, atomicType) {
-  return this.inst("xqx_integerConstantExpr('" + children[0][1][0] + "')", false, atomicType !== Fleur.Type_integer && atomicType !== Fleur.atomicTypes ? atomicType : null);
+Fleur.Transpiler.prototype.xqx_integerConstantExpr = function(children, expectedType) {
+  return {
+    inst: this.inst("xqx_integerConstantExpr('" + children[0][1][0] + "')", false).inst,
+    sequenceType: {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_integer,
+      occurrence: 1
+    }
+  };
 };
 Fleur.Context.prototype.xqx_integerConstantExpr = function(arg) {
   this.itemstack.push(this.item);
@@ -21479,7 +23467,7 @@ Fleur.Context.prototype.xqx_namespaceDeclaration = function(prefix, uri) {
   attr.localName = prefix === "" ? "xmlns" : prefix;
   attr.namespaceURI = "http://www.w3.org/2000/xmlns/";
   const attrvalue = new Fleur.Text(uri);
-  attrvalue.schemaType = Fleur.Type_untypedAtomic;
+  attrvalue.schemaTypeInfo = Fleur.Type_untypedAtomic;
   attr.appendChild(attrvalue);
   this.itemstack.push(this.item);
   this.item = attr;
@@ -22450,12 +24438,14 @@ Fleur.XQueryEngine[Fleur.XQueryX.rootExpr] = function(ctx, children, callback) {
 Fleur.XQueryEngine[Fleur.XQueryX.schemaLocation] = function(ctx, children, callback) {
   Fleur.callback(function() {callback(ctx._result);});
 };
-Fleur.Transpiler.prototype.xqx_sequenceExpr = function(children) {
+Fleur.Transpiler.prototype.xqx_sequenceExpr = function(children, expectedType) {
   let items = "";
   for (let i = 0, l = children.length; i < l; i++) {
-    items += this.gen(children[i]);
+    items += this.gen(children[i], expectedType).inst;
   }
-  return items + this.inst("xqx_sequenceExpr(" + String(children.length) + ")");
+  return this.inst("xqx_sequenceExpr(" + String(children.length) + ")", false,
+    items !== "" ? expectedType : {occurrence: "0"}, 
+    items);
 };
 Fleur.Context.prototype.xqx_sequenceExpr = function(itemlen) {
   const items = [];
@@ -22789,8 +24779,18 @@ Fleur.XQueryEngine[Fleur.XQueryX.stepExpr] = function(ctx, children, callback) {
   };
   Fleur.XQueryEngine[children[0][0]](ctx, children[0][1], cb);
 };
-Fleur.Transpiler.prototype.xqx_stringConstantExpr = function(children) {
-  return this.inst("xqx_stringConstantExpr('" + (children[0][1][0] || "").replace(/\'/g, "\\'") + "')");
+Fleur.Transpiler.prototype.xqx_stringConstantExpr = function(children, expectedType) {
+  if (expectedType && Fleur.numericTypes.indexOf(expectedType.schemaTypeInfo) !== -1) {
+    Fleur.XQueryError_xqt("FORG00001", null, "Wrong argument type");
+  }
+  return {
+    inst: this.inst("xqx_stringConstantExpr('" + (children[0][1][0] || "").replace(/\'/g, "\\'") + "')").inst,
+    sequenceType: {
+      nodeType: Fleur.Node.TEXT_NODE,
+      schemaTypeInfo: Fleur.Type_string,
+      occurrence: 1
+    }
+  }
 };
 Fleur.Context.prototype.xqx_stringConstantExpr = function(arg) {
   this.itemstack.push(this.item);
@@ -24774,8 +26774,15 @@ Fleur.XQueryEngine[Fleur.XQueryX.setOp] = function(ctx, children) {};
 Fleur.XQueryEngine[Fleur.XQueryX.stringOp] = function(ctx, children) {};
 Fleur.XQueryEngine[Fleur.XQueryX.unionOp] = function(ctx, children) {};
 Fleur.XQueryEngine[Fleur.XQueryX.valueComparisonOp] = function(ctx, children) {};
-Fleur.Transpiler.prototype.xqx_unaryMinusOp = function(children) {
-  return this.gen(children[0][1][0], Fleur.atomicTypes) + this.inst("xqx_unaryMinusOp()");
+Fleur.Transpiler.prototype.xqx_unaryMinusOp = function(children, expectedType) {
+  if (expectedType && Fleur.numericTypes.indexOf(expectedType.schemaTypeInfo) === -1) {
+    Fleur.XQueryError_xqt("FORG00001", null, "Wrong argument type");
+  }
+  return this.inst("xqx_unaryMinusOp()", false, expectedType, this.gen(children[0][1][0], {
+    nodeType: Fleur.Node.TEXT_NODE,
+    schemaTypeInfo: Fleur.Type_numeric,
+    occurrence: 1
+  }));
 };
 Fleur.Context.prototype.xqx_unaryMinusOp = function() {
   const op = Fleur.toJSNumber(this.item);

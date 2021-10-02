@@ -500,13 +500,20 @@ Fleur.evaluate = function(expression, contextNode, env, type, xpresult) {
 Fleur.Document.prototype.evaluate = function(expression, contextNode, env, type, xpresult) {
 	contextNode = contextNode || this;
 	return Fleur.evaluate(expression, contextNode, env, type, xpresult);
-};;
+};
+Document.prototype.evaluate = function(expression, contextNode, env, type, xpresult) {
+	contextNode = contextNode || this;
+	return Fleur.evaluate(expression, contextNode, env, type, xpresult);
+};
 Fleur.createExpression = function(expression) {
 	expression = expression || "";
 	return new Fleur.XPathExpression(expression);
 };
 Fleur.Document.prototype.createExpression = Fleur.createExpression;
 Fleur.Document.prototype.createNSResolver = function(node) {
+	return new Fleur.XPathNSResolver(node);
+};
+Document.prototype.createNSResolver = function(node) {
 	return new Fleur.XPathNSResolver(node);
 };
 /*

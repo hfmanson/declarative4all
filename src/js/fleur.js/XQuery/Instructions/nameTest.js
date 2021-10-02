@@ -34,7 +34,11 @@ Fleur.XQueryEngine[Fleur.XQueryX.nameTest] = function(ctx, children, callback) {
   }
   var nsURI;
   if (children.length === 1) {
-    nsURI = ctx.env.nsresolver.lookupNamespaceURI("") || "";
+    if (ctx._curr.nodeType === Fleur.Node.ATTRIBUTE_NODE) {
+      nsURI = "";
+    } else {
+      nsURI = ctx.env.nsresolver.lookupNamespaceURI("") || "";      
+    }
   } else if (children[1][0] === Fleur.XQueryX.prefix) {
     nsURI = ctx.env.nsresolver.lookupNamespaceURI(children[1][1][0]) || "";
   } else {

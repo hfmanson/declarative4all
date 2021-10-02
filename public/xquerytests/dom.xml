@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <title>Direct DOM</title>
+    <style type="text/css">
+<![CDATA[
+      @media screen and (prefers-color-scheme: dark) {
+        body, textarea {
+        background-color: black;
+        color: lightgrey;
+        }
+      }
+      @media screen and (prefers-color-scheme: light) {
+        body, textarea {
+        background-color: white;
+        color: black;
+        }
+      }
+]]>
+    </style>
+    <script type="text/javascript" src="js/fleur.js"></script>
+  </head>
+  <body>
+    <button id="run" onclick="run()">Run</button>
+    <br/>
+    <textarea id="test" style="height: 150px; width: 1300px" oninput="fclear()">
+<![CDATA[
+./*:*
+]]>
+	</textarea>
+    <hr/>
+    <textarea id="doc" style="height: 150px; width: 1300px" oninput="fclear()">
+<![CDATA[
+<span xmlns="http://www.w3.org/1999/xhtml">Hello</span>
+]]>    
+    </textarea>
+    <hr/>
+    <div id="effectiveresult"></div>
+    <hr/>
+    <pre id="xqueryx"></pre>
+    <script type="text/javascript">
+<![CDATA[
+      function fclear() {
+        document.getElementById("effectiveresult").innerHTML = "";
+        //alert("clear");
+      }
+      var xqeval = async function(xexpr, xmldoc) {
+        try {
+          var res = await xmldoc.evaluate(xexpr);
+          var el = res.iterateNext();
+          if (el) {
+            document.getElementById("effectiveresult").appendChild(el);
+          }
+        } catch(e) {
+        }
+      };
+      function run() {
+        try {
+          var parser = new DOMParser();
+          var xmldoc = parser.parseFromString(document.getElementById("doc").value, "application/xml");
+          var jsret = Fleur.XPathEvaluator._xq2js(document.getElementById("test").value);
+        } catch(e) {
+          document.getElementById("xqueryx").innerHTML = "Exception!\n" + e.message + (jsret ? "\n\n" + jsret : "");
+        }
+        xqeval(document.getElementById("test").value, xmldoc);
+      }
+]]>
+    </script>
+  </body>
+</html>

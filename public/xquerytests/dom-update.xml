@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <title>Direct DOM</title>
+    <style type="text/css">
+<![CDATA[
+      @media screen and (prefers-color-scheme: dark) {
+        body, textarea {
+        background-color: black;
+        color: lightgrey;
+        }
+      }
+      @media screen and (prefers-color-scheme: light) {
+        body, textarea {
+        background-color: white;
+        color: black;
+        }
+      }
+      .blue {
+        color: blue;
+      }
+      .red {
+        color: red;
+      }      
+]]>
+    </style>
+    <script type="text/javascript" src="js/fleur.js"></script>
+  </head>
+  <body>
+    <button id="run" onclick="run()">Run</button>
+    <br/>
+    <textarea id="test" style="height: 150px; width: 1300px" oninput="fclear()">
+<![CDATA[
+(
+  replace value of node text() with 'replacement',
+  replace value of node @class with 'red',
+  'result'
+)
+]]>
+	</textarea>
+    <hr/>
+    <div id="input" class="blue">original</div>
+    <hr/>
+    <div id="effectiveresult"></div>
+    <hr/>
+    <pre id="xqueryx"></pre>
+    <script type="text/javascript">
+<![CDATA[
+      function fclear() {
+        document.getElementById("effectiveresult").innerHTML = "";
+        //alert("clear");
+      }
+      var xqeval = async function(xexpr, input) {
+        var xmldoc = input.ownerDocument;
+        try {
+          var res = await xmldoc.evaluate(xexpr, input);
+          var el = res.iterateNext();
+          if (el) {
+            document.getElementById("effectiveresult").appendChild(el);
+          }
+        } catch(e) {
+        }
+      };
+      function run() {
+        var input;
+        try {
+          var parser = new DOMParser();
+          input = document.getElementById("input");
+          var jsret = Fleur.XPathEvaluator._xq2js(document.getElementById("test").value);
+        } catch(e) {
+          document.getElementById("xqueryx").innerHTML = "Exception!\n" + e.message + (jsret ? "\n\n" + jsret : "");
+        }
+        xqeval(document.getElementById("test").value, input);
+      }
+]]>
+    </script>
+  </body>
+</html>

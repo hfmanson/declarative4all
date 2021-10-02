@@ -12,8 +12,13 @@ Fleur.XQueryEngine[Fleur.XQueryX.attributeList] = function(ctx, children, callba
     if (n === Fleur.EmptySequence) {
       Fleur.callback(function() {callback(elt);});
     } else if (n.nodeType === Fleur.Node.ATTRIBUTE_NODE) {
-      elt.setAttributeNode(n);
-      if (children.length > 1) {
+			if (n.namespaceURI ===  "http://www.w3.org/2000/xmlns/") {
+				elt = document.createElementNS(n.value, elt.new_prefix + elt.localName);
+				ctx.env.current_element_namespace = n.value;
+			} else {
+				elt.setAttributeNode(n);
+			}
+			if (children.length > 1) {
         Fleur.XQueryEngine[Fleur.XQueryX.attributeList](ctx, children.slice(1), function(n) {
           Fleur.callback(function() {callback(n);});
         }, elt);

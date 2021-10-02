@@ -30,8 +30,11 @@ Fleur.Context.prototype.xqx_stringConstantExpr = function(arg) {
 };
 
 Fleur.XQueryEngine[Fleur.XQueryX.stringConstantExpr] = function(ctx, children, callback) {
-  var n = new Fleur.Text();
-  n.appendData(children[0][1][0] || "");
+/*
+	var n = new Fleur.Text();
+	n.appendData(children[0][1][0] || "");
+*/
+	var n = document.createTextNode(children[0][1][0] || "");
   n.schemaTypeInfo = Fleur.Type_string;
   Fleur.callback(function() {callback(n);});
 };

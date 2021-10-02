@@ -15,7 +15,7 @@ Fleur.XQueryEngine[Fleur.XQueryX.replaceExpr] = function(ctx, children, callback
         if (replaceValue === 1) {
           var a = Fleur.Atomize(replacement);
           target.textContent = a.data;
-          target.firstChild.schemaTypeInfo = a.schemaTypeInfo;
+          //target.firstChild.schemaTypeInfo = a.schemaTypeInfo;
         } else if (replacement === Fleur.EmptySequence) {
           if (target.nodeType === Fleur.Node.ATTRIBUTE_NODE) {
             target.ownerElement.removeAttributeNode(target);

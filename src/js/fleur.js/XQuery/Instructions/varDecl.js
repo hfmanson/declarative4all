@@ -21,10 +21,7 @@ Fleur.XQueryEngine[Fleur.XQueryX.varDecl] = function(ctx, children, callback) {
   }
   if (children[1][0] === Fleur.XQueryX.external) {
     if (ctx.env.args && ctx.env.args[vname]) {
-      var n = new Fleur.Text();
-      n.data = ctx.env.args[vname];
-      n.schemaTypeInfo = Fleur.Type_untypedAtomic;
-      ctx.env.globalvarresolver.set(ctx, uri, vname, n);
+      ctx.env.globalvarresolver.set(ctx, uri, vname, ctx.env.args[vname]);
       Fleur.callback(function() {callback();});
     } else if (children.length === 3) {
       Fleur.XQueryEngine[children[2][1][0][0]](ctx, children[2][1][0][1], function(n) {

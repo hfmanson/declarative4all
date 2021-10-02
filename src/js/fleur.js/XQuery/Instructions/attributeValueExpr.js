@@ -14,7 +14,10 @@ Fleur.XQueryEngine[Fleur.XQueryX.attributeValueExpr] = function(ctx, children, c
       Fleur.callback(function() {callback(a);});
     } else {
       if (a !== Fleur.EmptySequence) {
-        attr.firstChild.data += a.data;
+/*
+				attr.firstChild.data += a.data;
+*/
+				attr.value += a.data;
       }
       if (children.length > 1) {
         Fleur.XQueryEngine[Fleur.XQueryX.attributeValueExpr](ctx, children.slice(1), function(n) {

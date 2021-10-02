@@ -46,7 +46,27 @@ Fleur.Context.prototype.xqx_attributeConstructor_value = function(prefix, localN
 };
 
 Fleur.XQueryEngine[Fleur.XQueryX.attributeConstructor] = function(ctx, children, callback, elt) {
-  var attr = new Fleur.Attr();
+	var attr;
+	if (children[0][1].length === 2) {
+		var prefix = children[0][1][1][1][0];
+		var namespace = ctx.env.nsresolver.lookupNamespaceURI(prefix);
+		attr = document.createAttributeNS(namespace, prefix + ":" + children[0][1][0]);
+	} else {
+		attr = document.createAttribute(children[0][1][0]);
+	}
+	attr.cachedNamespaceURI = elt.lookupNamespaceURI(attr.prefix) || ctx.env.nsresolver.lookupNamespaceURI(attr.prefix);
+	if (children[1][0] === Fleur.XQueryX.attributeValue) {
+		if (children[1][1].length !== 0) {
+			attr.value = children[1][1][0];
+		}
+		Fleur.callback(function() {callback(attr);});
+	} else {
+		attr.value = "";
+		Fleur.XQueryEngine[children[1][0]](ctx, children[1][1], function(n) {
+			Fleur.callback(function() {callback(n);});
+		}, attr);
+	}
+/*	
   var t;
   attr.nodeName = children[0][1][0];
   attr.localName = children[0][1][0];
@@ -71,4 +91,5 @@ Fleur.XQueryEngine[Fleur.XQueryX.attributeConstructor] = function(ctx, children,
       Fleur.callback(function() {callback(n);});
     }, attr);
   }
+*/    
 };
