@@ -53,7 +53,7 @@ declare function local:renderlevel($leveldoc) {
 			{
 				for $row in 1 to $rows, $column in 1 to $columns
 					let
-						$field := $chain-field[@row = xs:string($row)][@column = xs:string($column)]
+						$field := $chain-field[xs:integer(@row) = $row][xs:integer(@column) = $column]
 					return local:process-field($row, $column, $field)
 			}
 			</g>

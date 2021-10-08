@@ -2,22 +2,6 @@
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <title>Chainreacion</title>
-    <style type="text/css">
-<![CDATA[
-      @media screen and (prefers-color-scheme: dark) {
-        body, textarea {
-        background-color: black;
-        color: lightgrey;
-        }
-      }
-      @media screen and (prefers-color-scheme: light) {
-        body, textarea {
-        background-color: white;
-        color: black;
-        }
-      }
-]]>
-    </style>
     <script type="text/javascript" src="js/fleur.js"></script>
     <script type="text/javascript" src="chainreaction.js"></script>
   </head>
