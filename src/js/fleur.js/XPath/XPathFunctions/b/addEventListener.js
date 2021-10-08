@@ -20,24 +20,11 @@ Fleur.XPathFunctions_b["addEventListener#3"] = new Fleur.Function("http://xqib.o
 			newctx.env.varresolver = new Fleur.varMgr([], ctx.env.varresolver);
 			newctx.env.nsresolver = ctx.env.nsresolver;
 			newctx.env.varresolver.set(ctx, "", handler.argtypes[0].name, evt.target);
-			var evtelt = new Fleur.Element();
-			evtelt.nodeName = "event";
-			evtelt.namespaceURI = null;
-			evtelt.localName = "event";
-			evtelt.prefix = null;
-			evtelt.childNodes = new Fleur.NodeList();
-			evtelt.children = new Fleur.NodeList();
-			evtelt.textContent = "";
+			var evtelt = document.createElementNS(null, "event");
 			["screenX", "screenY", "clientX", "clientY", "button", "key", "ctrlKey", "shiftKey", "altKey", "metaKey"].forEach(function(p) {
 				var prop;
 				if (evt[p] !== null && evt[p] !== undefined) {
-					prop = new Fleur.Element();
-					prop.nodeName = p;
-					prop.namespaceURI = null;
-					prop.localName = p;
-					prop.prefix = null;
-					prop.childNodes = new Fleur.NodeList();
-					prop.children = new Fleur.NodeList();
+					prop = document.createElementNS(null, p);
 					prop.textContent = String(evt[p]);
 					evtelt.appendChild(prop);
 				}
