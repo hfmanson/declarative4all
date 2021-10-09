@@ -78,10 +78,17 @@ Fleur.XQueryEngine[Fleur.XQueryX.elementConstructor] = function(ctx, children, c
 			//elt.cachedNamespaceURI = elt.lookupNamespaceURI(elt.prefix) || ctx.env.nsresolver.lookupNamespaceURI(elt.prefix);
 			elt = n;
 			if (children.length > 2) {
-				//var nsr = ctx.env.nsresolver;
-				//ctx.env.nsresolver = new Fleur.XPathNSResolver(elt);
+				var nsr = ctx.env.nsresolver;
+				ctx.env.nsresolver = new Fleur.XPathNSResolver(elt);
+				if (nsr.nsresolver) {
+					ctx.env.nsresolver.pf = nsr.nsresolver.pf;
+					ctx.env.nsresolver.uri = nsr.nsresolver.uri;
+				} else {
+					ctx.env.nsresolver.pf = nsr.pf;
+					ctx.env.nsresolver.uri = nsr.uri;
+				}
 				Fleur.XQueryEngine[children[2][0]](ctx, children[2][1], function(n) {
-					//ctx.env.nsresolver = nsr;
+					ctx.env.nsresolver = nsr;
 					Fleur.callback(function() {callback(n);});
 				}, elt);
 			} else {
