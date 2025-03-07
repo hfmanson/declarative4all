@@ -3,6 +3,7 @@
 		"addEventListener.js",
 		"alert.js",
 		"dom.js",
+		"getLocation.js",
 		"getProperty.js",
 		"getStyle.js",
 		"log.js",
